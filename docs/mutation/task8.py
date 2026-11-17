@@ -1,0 +1,51 @@
+"""Mutation run for LLM-Gateway Task 8. Each mutant: apply, run pytest, restore."""
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(sys.argv[1])
+U = ROOT / "src" / "llm_gateway" / "api" / "usage.py"
+MAIN = ROOT / "src" / "llm_gateway" / "main.py"
+
+MUTANTS = [
+    ("W01 start>=end allowed", U, "    if start >= end:\n", "    if False:\n"),
+    ("W02 only start>end rejected", U, "    if start >= end:\n", "    if start > end:\n"),
+    ("W03 range code wrong", U, '"invalid_range"', '"bad_range"'),
+    ("W04 window cap removed", U, "    if end - start > MAX_WINDOW:\n", "    if False:\n"),
+    ("W05 cap off by one", U, "    if end - start > MAX_WINDOW:\n", "    if end - start >= MAX_WINDOW:\n"),
+    ("W06 cap bigger", U, "MAX_WINDOW = timedelta(days=366)", "MAX_WINDOW = timedelta(days=3660)"),
+    ("W07 naive dates accepted", U, "start: Annotated[AwareDatetime, Query()], end: Annotated[AwareDatetime, Query()]", "start: Annotated[datetime, Query()], end: Annotated[datetime, Query()]"),
+    ("R01 developers can read", U, "Depends(require_role(Role.VIEWER, Role.ADMIN))", "Depends(require_role(*Role))"),
+    ("R02 admins cannot read", U, "Depends(require_role(Role.VIEWER, Role.ADMIN))", "Depends(require_role(Role.VIEWER))"),
+    ("A01 audit ignores tenant", U, "    records = await state.audit.list_for_tenant(reader.tenant_id, start, end)\n    return [AuditRow.of(r) for r in records]", '    records = await state.audit.list_for_tenant(reader.tenant_id, start, end) + [r for t in {getattr(r, "tenant_id") for r in getattr(state.audit, "_records", [])} if t != reader.tenant_id for r in await state.audit.list_for_tenant(t, start, end)]\n    return [AuditRow.of(r) for r in records]'),
+    ("A02 audit cost via float", U, "            cost_usd=str(record.cost_usd),\n", "            cost_usd=str(float(record.cost_usd)),\n"),
+    ("A03 audit key prefix wrong", U, "            key_prefix=record.key_prefix,\n", "            key_prefix=record.key_id,\n"),
+    ("A04 audit drops error code", U, "            error_code=record.error_code,\n", "            error_code=None,\n"),
+    ("A05 audit window ignored", U, "    records = await state.audit.list_for_tenant(reader.tenant_id, start, end)\n    return [AuditRow.of(r) for r in records]", '    records = await state.audit.list_for_tenant(reader.tenant_id, __import__("datetime").datetime.min.replace(tzinfo=__import__("datetime").UTC), __import__("datetime").datetime.max.replace(tzinfo=__import__("datetime").UTC))\n    return [AuditRow.of(r) for r in records]'),
+    ("S01 usage counts error rows", U, '    billed = [r for r in records if r.status == "ok"]', "    billed = list(records)"),
+    ("S02 usage not grouped", U, "        by_model[record.model].append(record)", '        by_model["all"].append(record)'),
+    ("S03 usage unsorted", U, "for model, rows in sorted(by_model.items())", "for model, rows in reversed(list(by_model.items()))"),
+    ("S04 calls miscounted", U, "            calls=len(rows),\n", "            calls=1,\n"),
+    ("S05 output tokens not summed", U, "            output_tokens=sum(r.output_tokens for r in rows),\n", "            output_tokens=sum(r.input_tokens for r in rows),\n"),
+    ("S06 total not quantized", U, "    return UsageSummary(total_cost_usd=_money(total), by_model=models)", "    return UsageSummary(total_cost_usd=str(total), by_model=models)"),
+    ("S07 total from first model only", U, "    total = sum((r.cost_usd for r in billed), Decimal(0))\n", "    total = sum((r.cost_usd for r in billed[:1]), Decimal(0))\n"),
+    ("S08 usage tenant wrong", U, "    records = await state.audit.list_for_tenant(reader.tenant_id, start, end)\n    billed", '    records = await state.audit.list_for_tenant(reader.key_id, start, end)\n    billed'),
+    ("M01 router not mounted", MAIN, "    app.include_router(usage.router)\n", ""),
+    ("T01 clock not normalized to UTC", ROOT / "src" / "llm_gateway" / "api" / "chat.py", "    now = reading.astimezone(UTC)", "    now = reading"),
+    ("T02 naive clock accepted", ROOT / "src" / "llm_gateway" / "api" / "chat.py", "    if reading.tzinfo is None:\n", "    if False:\n"),
+    ("T03 audit record accepts naive", ROOT / "src" / "llm_gateway" / "audit" / "records.py", "        if self.created_at.tzinfo is None:\n", "        if False:\n"),
+]
+
+CMD = ["uv", "run", "pytest", "-q", "-x", "-p", "no:warnings"]
+for mid, path, old, new in MUTANTS:
+    original = path.read_text(encoding="utf-8")
+    assert old in original, f"{mid}: pattern not found"
+    assert old != new, f"{mid}: no-op"
+    path.write_text(original.replace(old, new, 1), encoding="utf-8")
+    try:
+        rc = subprocess.run(CMD, cwd=ROOT, capture_output=True, timeout=300).returncode
+    finally:
+        path.write_text(original, encoding="utf-8")
+    print(f"{mid}\t{'killed' if rc else 'SURVIVED'}")
+rc = subprocess.run(CMD, cwd=ROOT, capture_output=True).returncode
+print("baseline after restore:", "green" if rc == 0 else "RED")

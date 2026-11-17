@@ -3,7 +3,12 @@
 Gap analysis of the repo as of 2026-11-17 and the work left, split into small tasks.
 Each task is one PR: write the listed tests first, then the code until they pass.
 
-## Where we are
+> **Update 2026-11-17:** tasks 1.1-1.7 and 1.10 are done (in memory, 201 tests). See the
+> implementation plan in `docs/superpowers/plans/` and the README roadmap. Next: 1.8
+> PostgreSQL and 1.9 Anthropic, plus `/v1/audit` pagination. The table below is the
+> original starting point.
+
+## Where we were (starting point)
 
 | Area | State |
 |---|---|
@@ -73,7 +78,7 @@ the audit row and the bill. Everything in memory first; the database comes in ta
   latency, timestamp. Written for failures too.
 - `billing/`: price table with `effective_from` dates; cost resolved by the call's timestamp;
   only successful calls are billable.
-- Read endpoints: `GET /v1/audit`, `GET /v1/usage?from=&to=` (scoped to the caller's tenant).
+- Read endpoints: `GET /v1/audit`, `GET /v1/usage?start=&end=` (scoped to the caller's tenant).
 - Tests: price change mid-month bills each call at its own date's price; failed call is
   audited with cost 0; tenant A never sees tenant B's rows.
 
