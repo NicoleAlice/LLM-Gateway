@@ -1,6 +1,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
+from decimal import Decimal
 from typing import cast
 
 from fastapi import Request
@@ -11,6 +12,7 @@ from llm_gateway.auth.repository import (
     KeyRepository,
     TenantRepository,
 )
+from llm_gateway.billing.pricing import Price, PriceTable
 from llm_gateway.config import Settings
 from llm_gateway.routing.repository import InMemoryRoutingRuleRepository, RoutingRuleRepository
 
@@ -18,6 +20,10 @@ from llm_gateway.routing.repository import InMemoryRoutingRuleRepository, Routin
 def _default_catalog() -> dict[str, str]:
     """Model name -> provider name. Real providers are added in the next plan."""
     return {"fake-echo": "fake"}
+
+
+def _default_prices() -> PriceTable:
+    return PriceTable([Price("fake-echo", date(2026, 1, 1), Decimal("1.00"), Decimal("2.00"))])
 
 
 Clock = Callable[[], datetime]
@@ -34,6 +40,7 @@ class AppState:
     keys: KeyRepository = field(default_factory=InMemoryKeyRepository)
     routing: RoutingRuleRepository = field(default_factory=InMemoryRoutingRuleRepository)
     catalog: dict[str, str] = field(default_factory=_default_catalog)
+    prices: PriceTable = field(default_factory=_default_prices)
 
 
 def get_state(request: Request) -> AppState:
