@@ -14,7 +14,7 @@ import asyncio
 import logging
 import uuid
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import UTC, date
 from decimal import Decimal
 from time import perf_counter
 from typing import Annotated
@@ -76,9 +76,12 @@ async def chat(
     state: Annotated[AppState, Depends(get_state)],
     caller: Annotated[Principal, Depends(require_role(Role.DEVELOPER))],
 ) -> ChatResult:
-    # Before the try: without a timestamp there is no row to write. A clock that raises
-    # is a 500 with no audit row; that is the one unaudited path.
-    now = state.clock()  # one timestamp for routing, pricing and the audit row
+    # Before the try: without a valid timestamp there is no row to write. A clock that
+    # raises or is naive is a 500 with no audit row; that is the one unaudited path.
+    reading = state.clock()  # one timestamp for routing, pricing and the audit row
+    if reading.tzinfo is None:
+        raise RuntimeError("the clock must return timezone-aware datetimes")
+    now = reading.astimezone(UTC)  # rows are stored and priced on the UTC calendar
     started = perf_counter()
     outcome = _Outcome(model=body.model or state.settings.default_model)
     failure: BaseException | None = None

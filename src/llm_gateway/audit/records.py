@@ -24,6 +24,12 @@ class AuditRecord:
     latency_ms: int
     created_at: datetime
 
+    def __post_init__(self) -> None:
+        # A naive timestamp can't be compared with the aware window bounds: one such row
+        # would break every read of its tenant's audit trail.
+        if self.created_at.tzinfo is None:
+            raise ValueError("created_at must be timezone-aware")
+
 
 class AuditRepository(Protocol):
     async def add(self, record: AuditRecord) -> None: ...
