@@ -1,10 +1,16 @@
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import cast
 
 from fastapi import Request
 
+from llm_gateway.auth.repository import (
+    InMemoryKeyRepository,
+    InMemoryTenantRepository,
+    KeyRepository,
+    TenantRepository,
+)
 from llm_gateway.config import Settings
 
 Clock = Callable[[], datetime]
@@ -17,6 +23,8 @@ class AppState:
 
     settings: Settings
     clock: Clock
+    tenants: TenantRepository = field(default_factory=InMemoryTenantRepository)
+    keys: KeyRepository = field(default_factory=InMemoryKeyRepository)
 
 
 def get_state(request: Request) -> AppState:

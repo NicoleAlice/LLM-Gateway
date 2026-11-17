@@ -15,3 +15,4 @@ class Settings(BaseSettings):
     admin_token: SecretStr = Field(min_length=16)
     default_model: str = "fake-echo"
     anthropic_api_key: SecretStr | None = None
+    max_body_bytes: int = Field(1_048_576, ge=1024)  # 1 MiB; bodies above it get 413
