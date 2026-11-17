@@ -6,6 +6,7 @@ from typing import cast
 
 from fastapi import Request
 
+from llm_gateway.audit.records import AuditRepository, InMemoryAuditRepository
 from llm_gateway.auth.repository import (
     InMemoryKeyRepository,
     InMemoryTenantRepository,
@@ -14,7 +15,13 @@ from llm_gateway.auth.repository import (
 )
 from llm_gateway.billing.pricing import Price, PriceTable
 from llm_gateway.config import Settings
+from llm_gateway.providers.base import Provider
+from llm_gateway.providers.fake import FakeProvider
 from llm_gateway.routing.repository import InMemoryRoutingRuleRepository, RoutingRuleRepository
+
+
+def _default_providers() -> dict[str, Provider]:
+    return {"fake": FakeProvider()}
 
 
 def _default_catalog() -> dict[str, str]:
@@ -41,6 +48,8 @@ class AppState:
     routing: RoutingRuleRepository = field(default_factory=InMemoryRoutingRuleRepository)
     catalog: dict[str, str] = field(default_factory=_default_catalog)
     prices: PriceTable = field(default_factory=_default_prices)
+    providers: dict[str, Provider] = field(default_factory=_default_providers)
+    audit: AuditRepository = field(default_factory=InMemoryAuditRepository)
 
 
 def get_state(request: Request) -> AppState:

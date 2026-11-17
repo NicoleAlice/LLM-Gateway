@@ -1,8 +1,51 @@
 """Shared test helpers. Import with ``from tests.helpers import ...``."""
 
+import asyncio
+from datetime import UTC, datetime
+
 from fastapi.testclient import TestClient
 
+from llm_gateway.audit.records import AuditRecord
+from llm_gateway.providers.base import ChatRequest, ChatResponse
+from llm_gateway.providers.fake import FakeProvider
+
 ADMIN_TOKEN = "test-admin-token"  # matches the `settings` fixture
+HI = {"messages": [{"role": "user", "content": "hi"}]}
+
+
+class SpyProvider:
+    """Counts calls and delegates to ``FakeProvider``."""
+
+    name = "fake"
+
+    def __init__(self) -> None:
+        self.calls = 0
+        self._inner = FakeProvider()
+
+    async def chat(self, request: ChatRequest, model: str) -> ChatResponse:
+        self.calls += 1
+        return await self._inner.chat(request, model)
+
+
+class RaisingProvider:
+    """Raises ``exc`` on every call (also used with ``asyncio.CancelledError()``)."""
+
+    name = "fake"
+
+    def __init__(self, exc: BaseException) -> None:
+        self.exc = exc
+
+    async def chat(self, request: ChatRequest, model: str) -> ChatResponse:
+        raise self.exc
+
+
+def audit_rows(client: TestClient, tenant_id: str) -> list[AuditRecord]:
+    """Every audit row of a tenant. Sync tests only, and only with in-memory repos."""
+    repo = client.app.state.gateway.audit  # type: ignore[attr-defined]
+    start = datetime(2000, 1, 1, tzinfo=UTC)
+    end = datetime(2100, 1, 1, tzinfo=UTC)
+    rows: list[AuditRecord] = asyncio.run(repo.list_for_tenant(tenant_id, start, end))
+    return rows
 
 
 def auth(key: str) -> dict[str, str]:
