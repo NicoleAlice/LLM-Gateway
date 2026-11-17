@@ -12,6 +12,13 @@ from llm_gateway.auth.repository import (
     TenantRepository,
 )
 from llm_gateway.config import Settings
+from llm_gateway.routing.repository import InMemoryRoutingRuleRepository, RoutingRuleRepository
+
+
+def _default_catalog() -> dict[str, str]:
+    """Model name -> provider name. Real providers are added in the next plan."""
+    return {"fake-echo": "fake"}
+
 
 Clock = Callable[[], datetime]
 """Returns the current time as a timezone-aware UTC datetime."""
@@ -25,6 +32,8 @@ class AppState:
     clock: Clock
     tenants: TenantRepository = field(default_factory=InMemoryTenantRepository)
     keys: KeyRepository = field(default_factory=InMemoryKeyRepository)
+    routing: RoutingRuleRepository = field(default_factory=InMemoryRoutingRuleRepository)
+    catalog: dict[str, str] = field(default_factory=_default_catalog)
 
 
 def get_state(request: Request) -> AppState:

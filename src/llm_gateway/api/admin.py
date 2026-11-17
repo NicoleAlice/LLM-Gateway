@@ -11,6 +11,7 @@ from llm_gateway.api.errors import ApiError
 from llm_gateway.auth.deps import Principal, require_admin_token, require_role
 from llm_gateway.auth.keys import ApiKey, Role, Tenant, generate_key
 from llm_gateway.auth.repository import DuplicateKeyPrefixError
+from llm_gateway.routing.rules import RoutingMode, RoutingRule
 from llm_gateway.state import AppState, get_state
 
 router = APIRouter(prefix="/v1/admin", tags=["admin"])
@@ -51,6 +52,12 @@ class KeyInfo(BaseModel):
             created_at=key.created_at,
             revoked_at=key.revoked_at,
         )
+
+
+class RoutingRuleBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    mode: RoutingMode
+    model: str = Field(min_length=1, max_length=100)
 
 
 class KeyCreated(BaseModel):
@@ -108,4 +115,27 @@ async def revoke_key(key_id: str, state: State, admin: Admin) -> Response:
             raise ApiError(409, "last_admin_key", "a tenant must keep one active admin key")
     # No await yields between the check above and this revoke, so in memory it is atomic.
     await state.keys.revoke(admin.tenant_id, key_id, state.clock())
+    return Response(status_code=204)
+
+
+@router.get("/routing")
+async def get_routing_rule(state: State, admin: Admin) -> RoutingRuleBody:
+    rule = await state.routing.get(admin.tenant_id)
+    if rule is None:
+        raise ApiError(404, "no_routing_rule", "this tenant has no routing rule")
+    return RoutingRuleBody(mode=rule.mode, model=rule.model)
+
+
+@router.put("/routing")
+async def set_routing_rule(body: RoutingRuleBody, state: State, admin: Admin) -> RoutingRuleBody:
+    # Validate against the catalog now, so a typo can't break every call later.
+    if body.model not in state.catalog:
+        raise ApiError(400, "unknown_model", "model is not in the catalog")
+    await state.routing.set(admin.tenant_id, RoutingRule(mode=body.mode, model=body.model))
+    return body
+
+
+@router.delete("/routing", status_code=204)
+async def delete_routing_rule(state: State, admin: Admin) -> Response:
+    await state.routing.delete(admin.tenant_id)
     return Response(status_code=204)
