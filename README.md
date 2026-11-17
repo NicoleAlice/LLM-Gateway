@@ -30,9 +30,12 @@ A multi-tenant gateway that sits between applications and LLM providers and cont
 
 ```bash
 uv sync
-uv run uvicorn llm_gateway.main:app --reload
+export LLMGW_ADMIN_TOKEN="change-me-at-least-16-chars"
+uv run uvicorn --factory llm_gateway.main:create_app --reload
 uv run pytest
 ```
+
+PowerShell: `$env:LLMGW_ADMIN_TOKEN = "change-me-at-least-16-chars"` instead of `export`.
 
 ## Roadmap
 

@@ -46,8 +46,12 @@ extend-exclude = ["docs"]  # ruff formats code blocks inside .md; plan snippets 
 select = ["E", "F", "I", "B", "UP", "S", "SIM", "RUF"]
 ignore = ["S101"]  # assert is fine in tests
 
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S105", "S106"]  # fake tokens in tests are not secrets
+
 [tool.mypy]
 python_version = "3.12"
 strict = true
+plugins = ["pydantic.mypy"]
 packages = ["llm_gateway"]
 mypy_path = "src"
