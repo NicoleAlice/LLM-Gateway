@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
 
-from llm_gateway.audit.records import AuditRecord
+from llm_gateway.audit.records import AuditRecord, position_of
 from llm_gateway.providers.base import ChatRequest, ChatResponse
 from llm_gateway.providers.fake import FakeProvider
 
@@ -44,8 +44,16 @@ def audit_rows(client: TestClient, tenant_id: str) -> list[AuditRecord]:
     repo = client.app.state.gateway.audit  # type: ignore[attr-defined]
     start = datetime(2000, 1, 1, tzinfo=UTC)
     end = datetime(2100, 1, 1, tzinfo=UTC)
-    rows: list[AuditRecord] = asyncio.run(repo.list_for_tenant(tenant_id, start, end))
-    return rows
+
+    async def every_page() -> list[AuditRecord]:
+        rows: list[AuditRecord] = []
+        after = None
+        while page := await repo.list_page(tenant_id, start, end, limit=500, after=after):
+            rows += page
+            after = position_of(page[-1])
+        return rows
+
+    return asyncio.run(every_page())
 
 
 def auth(key: str) -> dict[str, str]:

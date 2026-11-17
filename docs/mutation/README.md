@@ -25,7 +25,8 @@ pattern fails loudly instead of reporting a false "killed".
 | `task6.py` | date-effective pricing, cost | 17 | 17 | 0 |
 | `task7.py` | `/v1/chat`, audit writes, cancellation, failure paths | 39 | 38 | 1 |
 | `task8.py` | `/v1/audit`, `/v1/usage`, time windows, UTC | 26 | 26 | 0 |
-| **Total** | | **225** | **224** | **1** |
+| `task_a1.py` | keyset pagination, cursor codec (Phase 1b-A) | 22 | 22 | 0 |
+| **Total** | | **247** | **246** | **1** |
 
 The survivor, `N02` in `task7.py`, is an **equivalent mutant**: it changes the default
 `error_code` of a chat outcome, but every exception path sets a code and the success path

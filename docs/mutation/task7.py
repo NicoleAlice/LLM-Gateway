@@ -61,7 +61,7 @@ MUTANTS = [
     ("U01 audit window closed", AUD, "start <= r.created_at < end", "start <= r.created_at <= end"),
     ("U02 audit window drops start", AUD, "start <= r.created_at < end", "start < r.created_at < end"),
     ("U03 audit not per tenant", AUD, "r.tenant_id == tenant_id and ", ""),
-    ("U04 audit newest first", AUD, "key=lambda r: r.created_at)", "key=lambda r: r.created_at, reverse=True)"),
+    ("U04 audit newest first", AUD, "sorted(rows, key=position_of)", "sorted(rows, key=position_of, reverse=True)"),
     ("S01 default provider missing", STATE, 'return {"fake": FakeProvider()}', "return {}"),
 ]
 

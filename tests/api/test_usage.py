@@ -30,10 +30,15 @@ AUDIT_FIELDS = {
 def setup_calls(client: TestClient) -> tuple[str, str, str]:
     _, admin = bootstrap(client)
     dev, viewer = create_key(client, admin, "developer"), create_key(client, admin, "viewer")
-    client.post("/v1/chat", headers=auth(dev), json=HI)
-    client.post("/v1/chat", headers=auth(dev), json=HI)
-    client.app.state.gateway.providers["fake"] = FakeProvider(fail=True)  # type: ignore[attr-defined]
-    client.post("/v1/chat", headers=auth(dev), json=HI)
+    state = client.app.state.gateway  # type: ignore[attr-defined]
+    base = state.clock()
+    # One microsecond apart: rows in the same instant are ordered by their random id,
+    # and these tests read them back in call order.
+    for step, fail in enumerate((False, False, True)):
+        state.clock.set(base + timedelta(microseconds=step))
+        state.providers["fake"] = FakeProvider(fail=fail)
+        client.post("/v1/chat", headers=auth(dev), json=HI)
+    state.clock.set(base)
     return admin, dev, viewer
 
 
@@ -56,14 +61,14 @@ def test_usage_counts_only_successful_calls(client: TestClient) -> None:
 
 def test_audit_lists_all_rows_for_tenant(client: TestClient) -> None:
     _, _, viewer = setup_calls(client)
-    rows = client.get("/v1/audit", headers=auth(viewer), params=WINDOW).json()
+    rows = client.get("/v1/audit", headers=auth(viewer), params=WINDOW).json()["items"]
     assert [r["status"] for r in rows] == ["ok", "ok", "error"]
     assert rows[0]["cost_usd"] == "0.000005" and rows[2]["cost_usd"] == "0.000000"
 
 
 def test_audit_row_shape(client: TestClient) -> None:
     _, dev, viewer = setup_calls(client)
-    rows = client.get("/v1/audit", headers=auth(viewer), params=WINDOW).json()
+    rows = client.get("/v1/audit", headers=auth(viewer), params=WINDOW).json()["items"]
     assert all(set(r) == AUDIT_FIELDS for r in rows)
     ok, _, failed = rows
     assert ok["created_at"] == "2026-11-17T12:00:00Z"
@@ -80,7 +85,7 @@ def test_audit_row_shape(client: TestClient) -> None:
 def test_tenants_are_isolated(client: TestClient) -> None:
     setup_calls(client)
     _, admin_b = bootstrap(client, "b")
-    assert client.get("/v1/audit", headers=auth(admin_b), params=WINDOW).json() == []
+    assert client.get("/v1/audit", headers=auth(admin_b), params=WINDOW).json()["items"] == []
     usage = client.get("/v1/usage", headers=auth(admin_b), params=WINDOW).json()
     assert usage == {"total_cost_usd": "0.000000", "by_model": []}
 
@@ -91,16 +96,16 @@ def test_window_is_half_open(client: TestClient) -> None:
     body = client.get("/v1/usage", headers=auth(viewer), params=before).json()
     assert body == {"total_cost_usd": "0.000000", "by_model": []}
     starting = {"start": "2026-11-17T12:00:00Z", "end": "2026-11-17T12:00:01Z"}
-    rows = client.get("/v1/audit", headers=auth(viewer), params=starting).json()
+    rows = client.get("/v1/audit", headers=auth(viewer), params=starting).json()["items"]
     assert len(rows) == 3
 
 
 def test_non_utc_offsets_are_honoured(client: TestClient) -> None:
     _, _, viewer = setup_calls(client)  # 12:00Z == 09:00-03:00
     sao_paulo = {"start": "2026-11-17T08:00:00-03:00", "end": "2026-11-17T09:00:00-03:00"}
-    assert client.get("/v1/audit", headers=auth(viewer), params=sao_paulo).json() == []
+    assert client.get("/v1/audit", headers=auth(viewer), params=sao_paulo).json()["items"] == []
     sao_paulo["end"] = "2026-11-17T09:00:01-03:00"
-    assert len(client.get("/v1/audit", headers=auth(viewer), params=sao_paulo).json()) == 3
+    assert len(client.get("/v1/audit", headers=auth(viewer), params=sao_paulo).json()["items"]) == 3
 
 
 def test_usage_groups_and_sorts_models(client: TestClient) -> None:
@@ -133,7 +138,7 @@ def test_rows_are_stored_and_shown_in_utc(settings: Settings) -> None:
     )
     client.post("/v1/chat", headers=auth(create_key(client, admin, "developer")), json=HI)
     window = {"start": "2026-11-18T00:00:00Z", "end": "2026-11-19T00:00:00Z"}
-    [row] = client.get("/v1/audit", headers=auth(admin), params=window).json()
+    [row] = client.get("/v1/audit", headers=auth(admin), params=window).json()["items"]
     assert row["created_at"] == "2026-11-18T00:30:00Z"
     assert row["cost_usd"] == "0.000015"  # the 18th's price, not the 17th's
 

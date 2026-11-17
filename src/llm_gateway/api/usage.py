@@ -13,7 +13,8 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import AwareDatetime, BaseModel
 
 from llm_gateway.api.errors import ApiError
-from llm_gateway.audit.records import AuditRecord, AuditStatus
+from llm_gateway.audit.cursor import decode_cursor, encode_cursor
+from llm_gateway.audit.records import AuditPosition, AuditRecord, AuditStatus, position_of
 from llm_gateway.auth.deps import Principal, require_role
 from llm_gateway.auth.keys import Role
 from llm_gateway.billing.pricing import MICRO_USD
@@ -22,6 +23,7 @@ from llm_gateway.state import AppState, get_state
 router = APIRouter(prefix="/v1", tags=["usage"])
 
 MAX_WINDOW = timedelta(days=366)
+DEFAULT_PAGE, MAX_PAGE = 100, 1000
 State = Annotated[AppState, Depends(get_state)]
 Reader = Annotated[Principal, Depends(require_role(Role.VIEWER, Role.ADMIN))]
 
@@ -70,6 +72,11 @@ class AuditRow(BaseModel):
         )
 
 
+class AuditPage(BaseModel):
+    items: list[AuditRow]
+    next_cursor: str | None  # pass back as ?cursor= for the next page; null on the last
+
+
 class ModelUsage(BaseModel):
     model: str
     calls: int
@@ -88,10 +95,28 @@ def _money(amount: Decimal) -> str:
 
 
 @router.get("/audit")
-async def list_audit(reader: Reader, window: Window, state: State) -> list[AuditRow]:
+async def list_audit(
+    reader: Reader,
+    window: Window,
+    state: State,
+    limit: Annotated[int, Query(ge=1, le=MAX_PAGE)] = DEFAULT_PAGE,
+    cursor: Annotated[str | None, Query()] = None,  # length checked by decode_cursor
+) -> AuditPage:
+    """One page, oldest first, by keyset pagination on ``(created_at, id)``. Rows are
+    never repeated across pages, ties included. A row stored after the walk passed its
+    position (a slow call) is not returned: see ``AuditRepository.list_page``."""
     start, end = window
-    records = await state.audit.list_for_tenant(reader.tenant_id, start, end)
-    return [AuditRow.of(r) for r in records]
+    after: AuditPosition | None = None
+    if cursor is not None:
+        try:
+            after = decode_cursor(cursor)
+        except ValueError:
+            raise ApiError(422, "invalid_cursor", "cursor is not valid") from None
+    # One extra row tells us whether another page exists, without a COUNT.
+    rows = await state.audit.list_page(reader.tenant_id, start, end, limit=limit + 1, after=after)
+    page = rows[:limit]
+    next_cursor = encode_cursor(position_of(page[-1])) if len(rows) > limit else None
+    return AuditPage(items=[AuditRow.of(r) for r in page], next_cursor=next_cursor)
 
 
 @router.get("/usage")
