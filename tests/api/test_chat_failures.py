@@ -168,5 +168,5 @@ async def test_other_base_exceptions_still_get_an_error_code(settings: Settings)
     body = ChatRequest(messages=[ChatMessage(role="user", content="hi")])
     with pytest.raises(Interrupt):
         await chat_module.chat(body, state, caller)
-    [rec] = await state.audit.list_for_tenant("t1", now, now + timedelta(minutes=1))
+    [rec] = await state.audit.list_page("t1", now, now + timedelta(minutes=1), limit=10, after=None)
     assert (rec.status, rec.error_code) == ("error", "internal_error")

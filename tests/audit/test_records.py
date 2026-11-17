@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
@@ -5,6 +6,7 @@ from llm_gateway.audit.records import (
     AuditPosition,
     AuditRecord,
     InMemoryAuditRepository,
+    ModelTotals,
     position_of,
 )
 
@@ -40,8 +42,74 @@ async def test_window_is_half_open_and_per_tenant() -> None:
         rec("other-tenant", "t2", T0 + timedelta(minutes=5)),
     ):
         await repo.add(record)
-    rows = await repo.list_for_tenant("t1", T0, T0 + timedelta(hours=1))
+    rows = await repo.list_page("t1", T0, T0 + timedelta(hours=1), limit=100, after=None)
     assert [r.id for r in rows] == ["start", "inside"]
+
+
+def billed(
+    record_id: str,
+    model: str,
+    cost: str,
+    *,
+    tenant: str = "t1",
+    at: datetime = T0,
+    status: str = "ok",
+    tokens: tuple[int, int] = (1, 2),
+) -> AuditRecord:
+    return replace(
+        rec(record_id, tenant, at),
+        model=model,
+        cost_usd=Decimal(cost),
+        status=status,  # type: ignore[arg-type]
+        error_code=None if status == "ok" else "provider_error",
+        input_tokens=tokens[0],
+        output_tokens=tokens[1],
+    )
+
+
+async def test_usage_by_model_counts_only_ok_and_sums_exactly() -> None:
+    repo = InMemoryAuditRepository()
+    for record in (
+        billed("1", "a", "0.000001"),
+        billed("2", "a", "0.000001"),
+        billed("3", "a", "0.000001"),
+        billed("4", "a", "0.000000", status="error", tokens=(0, 0)),
+        billed("5", "b", "0.000001"),
+    ):
+        await repo.add(record)
+    assert await repo.usage_by_model("t1", T0, T0 + HOUR) == [
+        ModelTotals("a", 3, 3, 6, Decimal("0.000003")),
+        ModelTotals("b", 1, 1, 2, Decimal("0.000001")),
+    ]
+
+
+async def test_usage_by_model_is_per_tenant_and_windowed() -> None:
+    repo = InMemoryAuditRepository()
+    for record in (
+        billed("in", "a", "0.000002"),
+        billed("other-tenant", "a", "9.000000", tenant="t2"),
+        billed("too-early", "a", "9.000000", at=T0 - timedelta(microseconds=1)),
+        billed("at-end", "a", "9.000000", at=T0 + HOUR),
+    ):
+        await repo.add(record)
+    assert await repo.usage_by_model("t1", T0, T0 + HOUR) == [
+        ModelTotals("a", 1, 1, 2, Decimal("0.000002"))
+    ]
+    assert await repo.usage_by_model("t3", T0, T0 + HOUR) == []
+
+
+async def test_usage_by_model_sorts_models_and_never_goes_through_float() -> None:
+    repo = InMemoryAuditRepository()
+    for record_id, model in (("1", "zeta"), ("2", "alpha"), ("3", "mid")):
+        await repo.add(billed(record_id, model, "0.000001"))
+    totals = await repo.usage_by_model("t1", T0, T0 + HOUR)
+    assert [t.model for t in totals] == ["alpha", "mid", "zeta"]
+    # 0.1 + 0.2 in float is 0.30000000000000004: Decimal sums must stay exact.
+    exact = InMemoryAuditRepository()
+    await exact.add(billed("4", "m", "0.100000"))
+    await exact.add(billed("5", "m", "0.200000"))
+    [m] = await exact.usage_by_model("t1", T0, T0 + HOUR)
+    assert m.cost_usd == Decimal("0.300000")
 
 
 async def test_pages_split_ties_without_skipping_or_repeating() -> None:

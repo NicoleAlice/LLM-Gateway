@@ -24,9 +24,14 @@ pattern fails loudly instead of reporting a false "killed".
 | `task5.py` | routing rules and endpoints | 25 | 25 | 0 |
 | `task6.py` | date-effective pricing, cost | 17 | 17 | 0 |
 | `task7.py` | `/v1/chat`, audit writes, cancellation, failure paths | 39 | 38 | 1 |
-| `task8.py` | `/v1/audit`, `/v1/usage`, time windows, UTC | 26 | 26 | 0 |
+| `task8.py` | `/v1/audit`, `/v1/usage`, time windows, UTC | 18 | 18 | 0 |
 | `task_a1.py` | keyset pagination, cursor codec (Phase 1b-A) | 22 | 22 | 0 |
-| **Total** | | **247** | **246** | **1** |
+| `task_a2.py` | usage aggregated by the repository (Phase 1b-A) | 14 | 14 | 0 |
+| **Total** | | **253** | **252** | **1** |
+
+`task8.py` had 26 mutants; its 8 aggregation mutants (S01-S08) targeted code that moved
+from the `/v1/usage` route into the repository in task A2, so they now live, retargeted,
+in `task_a2.py`.
 
 The survivor, `N02` in `task7.py`, is an **equivalent mutant**: it changes the default
 `error_code` of a chat outcome, but every exception path sets a code and the success path

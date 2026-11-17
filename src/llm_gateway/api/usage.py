@@ -4,7 +4,6 @@ Both are scoped to the caller's tenant and to a half-open window ``[start, end)`
 explicit time zones. The window is capped so one request can't scan the whole history.
 """
 
-from collections import defaultdict
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Annotated
@@ -122,21 +121,17 @@ async def list_audit(
 @router.get("/usage")
 async def usage(reader: Reader, window: Window, state: State) -> UsageSummary:
     start, end = window
-    records = await state.audit.list_for_tenant(reader.tenant_id, start, end)
-    billed = [r for r in records if r.status == "ok"]  # failures are never billed
-
-    by_model: dict[str, list[AuditRecord]] = defaultdict(list)
-    for record in billed:
-        by_model[record.model].append(record)
+    # Aggregated by the store: the route never loads the rows themselves.
+    totals = await state.audit.usage_by_model(reader.tenant_id, start, end)
     models = [
         ModelUsage(
-            model=model,
-            calls=len(rows),
-            input_tokens=sum(r.input_tokens for r in rows),
-            output_tokens=sum(r.output_tokens for r in rows),
-            cost_usd=_money(sum((r.cost_usd for r in rows), Decimal(0))),
+            model=t.model,
+            calls=t.calls,
+            input_tokens=t.input_tokens,
+            output_tokens=t.output_tokens,
+            cost_usd=_money(t.cost_usd),
         )
-        for model, rows in sorted(by_model.items())
+        for t in totals
     ]
-    total = sum((r.cost_usd for r in billed), Decimal(0))
+    total = sum((t.cost_usd for t in totals), Decimal(0))
     return UsageSummary(total_cost_usd=_money(total), by_model=models)

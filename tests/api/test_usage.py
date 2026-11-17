@@ -4,7 +4,7 @@ from decimal import Decimal
 import pytest
 from fastapi.testclient import TestClient
 
-from llm_gateway.audit.records import AuditRecord
+from llm_gateway.audit.records import AuditRecord, InMemoryAuditRepository, ModelTotals
 from llm_gateway.billing.pricing import Price
 from llm_gateway.config import Settings
 from llm_gateway.main import create_app
@@ -173,6 +173,24 @@ def test_audit_record_rejects_naive_timestamps() -> None:
             latency_ms=0,
             created_at=datetime(2026, 11, 17, 12, 0),
         )
+
+
+def test_usage_money_is_always_six_decimals_whatever_the_store_returns(
+    client: TestClient,
+) -> None:
+    # A store could return more precision than a micro-dollar (e.g. a NUMERIC column
+    # without a fixed scale): the API still answers with exactly 6 decimals.
+    class PreciseStore(InMemoryAuditRepository):
+        async def usage_by_model(
+            self, tenant_id: str, start: datetime, end: datetime
+        ) -> list[ModelTotals]:
+            return [ModelTotals("m", 1, 1, 1, Decimal("0.0000016"))]
+
+    _, admin = bootstrap(client)
+    client.app.state.gateway.audit = PreciseStore()  # type: ignore[attr-defined]
+    body = client.get("/v1/usage", headers=auth(admin), params=WINDOW).json()
+    assert body["by_model"][0]["cost_usd"] == "0.000002"
+    assert body["total_cost_usd"] == "0.000002"
 
 
 @pytest.mark.parametrize("role", ["viewer", "admin"])

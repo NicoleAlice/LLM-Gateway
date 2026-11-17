@@ -137,7 +137,7 @@ async def test_shield_keeps_the_audit_row_on_real_cancellation(settings: Setting
         await started.wait()
         tg.cancel_scope.cancel()
 
-    rows = await state.audit.list_for_tenant("t1", now, now + _MINUTE)
+    rows = await state.audit.list_page("t1", now, now + _MINUTE, limit=10, after=None)
     assert [(r.status, r.error_code, r.cost_usd) for r in rows] == [("error", "cancelled", 0)]
     assert after_route == []  # the cancellation was re-raised, not swallowed
 

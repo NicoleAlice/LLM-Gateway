@@ -1,5 +1,6 @@
 """One audit record per chat attempt that passed auth and validation, failures included."""
 
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -47,6 +48,17 @@ def position_of(record: AuditRecord) -> AuditPosition:
     return AuditPosition(record.created_at, record.id)
 
 
+@dataclass(frozen=True)
+class ModelTotals:
+    """Billed usage of one model in a window: answered calls only."""
+
+    model: str
+    calls: int
+    input_tokens: int
+    output_tokens: int
+    cost_usd: Decimal
+
+
 class AuditRepository(Protocol):
     async def add(self, record: AuditRecord) -> None: ...
 
@@ -71,11 +83,11 @@ class AuditRepository(Protocol):
         longest request plus the audit write timeout."""
         ...
 
-    async def list_for_tenant(
+    async def usage_by_model(
         self, tenant_id: str, start: datetime, end: datetime
-    ) -> list[AuditRecord]:
-        """Every record in the window, oldest first. Kept until /v1/usage is aggregated
-        by the repository (plan 1b-A, task A2)."""
+    ) -> list[ModelTotals]:
+        """Totals per model of ``status == "ok"`` rows in ``[start, end)``, sorted by model.
+        Aggregated by the store (PostgreSQL: one ``GROUP BY``), never by loading rows."""
         ...
 
 
@@ -106,7 +118,20 @@ class InMemoryAuditRepository:
             rows = [r for r in rows if position_of(r) > after]
         return rows[:limit]
 
-    async def list_for_tenant(
+    async def usage_by_model(
         self, tenant_id: str, start: datetime, end: datetime
-    ) -> list[AuditRecord]:
-        return self._window(tenant_id, start, end)
+    ) -> list[ModelTotals]:
+        by_model: dict[str, list[AuditRecord]] = defaultdict(list)
+        for record in self._window(tenant_id, start, end):
+            if record.status == "ok":  # failures are never billed
+                by_model[record.model].append(record)
+        return [
+            ModelTotals(
+                model=model,
+                calls=len(rows),
+                input_tokens=sum(r.input_tokens for r in rows),
+                output_tokens=sum(r.output_tokens for r in rows),
+                cost_usd=sum((r.cost_usd for r in rows), Decimal(0)),
+            )
+            for model, rows in sorted(by_model.items())
+        ]

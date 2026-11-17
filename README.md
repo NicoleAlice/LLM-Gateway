@@ -4,7 +4,7 @@
 
 A multi-tenant gateway that sits between applications and LLM providers and controls **who can call which model, what each call costs, and what happened on every call**.
 
-> **Status:** Phase 1 (in-memory) is complete: keys, roles, routing, date-effective billing, `/v1/chat` and an audit row for every chat attempt, behind 243 tests, plus keyset pagination for the audit trail. Storage is in memory and the only provider is a built-in fake; PostgreSQL and a real Anthropic provider are next. See the [roadmap](#roadmap).
+> **Status:** Phase 1 (in-memory) is complete: keys, roles, routing, date-effective billing, `/v1/chat` and an audit row for every chat attempt, behind 247 tests, plus keyset pagination for the audit trail. Storage is in memory and the only provider is a built-in fake; PostgreSQL and a real Anthropic provider are next. See the [roadmap](#roadmap).
 
 ## Features
 
@@ -154,12 +154,12 @@ Every error has the same shape: `{"error": {"code": "...", "message": "..."}}`.
 ## How it was built and tested
 
 - **Test-first, task by task**, from a written plan ([docs/superpowers/plans/](docs/superpowers/plans/2026-11-17-phase-1-core.md)).
-- **Mutation testing** on every task: the code is deliberately broken in 247 specific ways (accept revoked keys, bill failed calls, skip the secret check, drop the cancellation shield, repeat a row across pages…) to prove the tests catch each one. On the current code 246 are caught; the remaining one is a documented equivalent mutant (a default value no code path can observe). The scripts and results are in [docs/mutation/](docs/mutation/README.md).
+- **Mutation testing** on every task: the code is deliberately broken in 253 specific ways (accept revoked keys, bill failed calls, skip the secret check, drop the cancellation shield, repeat a row across pages…) to prove the tests catch each one. On the current code 252 are caught; the remaining one is a documented equivalent mutant (a default value no code path can observe). The scripts and results are in [docs/mutation/](docs/mutation/README.md).
 - **An independent adversarial review** of every security-relevant change, then a fix and a test for each finding.
 - **CI** on every push to `main` and every pull request: `ruff check`, `ruff format --check`, `mypy` (strict) and `pytest` with coverage.
 
 ```bash
-uv run pytest              # 243 tests
+uv run pytest              # 247 tests
 uv run mypy                # strict
 uv run ruff check . && uv run ruff format --check .
 ```
@@ -167,7 +167,7 @@ uv run ruff check . && uv run ruff format --check .
 ## Roadmap
 
 - [x] **Phase 1a: core, in memory**: tenants, API keys, RBAC, revocation, routing rules, `/v1/chat`, audit, date-effective billing, fake provider
-- [ ] **Phase 1b: persistence and a real provider**: ~~keyset pagination for `/v1/audit`~~ (done), usage aggregated by the repository, an atomic last-admin check, Anthropic provider, PostgreSQL + Alembic
+- [ ] **Phase 1b: persistence and a real provider**: ~~keyset pagination for `/v1/audit`~~ and ~~usage aggregated by the repository~~ (done), an atomic last-admin check, Anthropic provider, PostgreSQL + Alembic
 - [ ] **Phase 2: FinOps and operations**: quotas and budgets, SSE streaming, OpenTelemetry traces, Prometheus metrics, rate limiting
 - [ ] **Phase 3: deployment**: Dockerfile, Docker Compose, Helm chart tested on `kind`
 
