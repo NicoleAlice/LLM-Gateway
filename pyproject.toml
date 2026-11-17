@@ -40,6 +40,7 @@ addopts = "-ra --strict-markers"
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+extend-exclude = ["docs"]  # ruff formats code blocks inside .md; plan snippets are not meant to be formatted
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "S", "SIM", "RUF"]
