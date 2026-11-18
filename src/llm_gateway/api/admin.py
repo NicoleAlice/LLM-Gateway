@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from llm_gateway.api.errors import ApiError
 from llm_gateway.auth.deps import Principal, require_admin_token, require_role
 from llm_gateway.auth.keys import ApiKey, Role, Tenant, generate_key
-from llm_gateway.auth.repository import DuplicateKeyPrefixError
+from llm_gateway.auth.repository import DuplicateKeyPrefixError, RevokeOutcome
 from llm_gateway.routing.rules import RoutingMode, RoutingRule
 from llm_gateway.state import AppState, get_state
 
@@ -105,17 +105,15 @@ async def list_keys(state: State, admin: Admin) -> list[KeyInfo]:
 
 @router.delete("/keys/{key_id}", status_code=204)
 async def revoke_key(key_id: str, state: State, admin: Admin) -> Response:
-    keys = await state.keys.list_for_tenant(admin.tenant_id)
-    target = next((k for k in keys if k.id == key_id), None)
-    if target is None:
+    # The repository decides atomically (check + write); the route only maps the outcome.
+    outcome, _ = await state.keys.revoke(
+        admin.tenant_id, key_id, state.clock(), keep_one_admin=True
+    )
+    if outcome is RevokeOutcome.NOT_FOUND:
         raise ApiError(404, "key_not_found", "no such key in this tenant")
-    if target.role is Role.ADMIN and target.is_active:
-        others = [k for k in keys if k.role is Role.ADMIN and k.is_active and k.id != key_id]
-        if not others:
-            raise ApiError(409, "last_admin_key", "a tenant must keep one active admin key")
-    # No await yields between the check above and this revoke, so in memory it is atomic.
-    await state.keys.revoke(admin.tenant_id, key_id, state.clock())
-    return Response(status_code=204)
+    if outcome is RevokeOutcome.LAST_ADMIN:
+        raise ApiError(409, "last_admin_key", "a tenant must keep one active admin key")
+    return Response(status_code=204)  # REVOKED or ALREADY_REVOKED: idempotent
 
 
 @router.get("/routing")

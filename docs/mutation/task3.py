@@ -32,7 +32,7 @@ MUTANTS = [
     ("R01 duplicate prefix overwrites", REPO, "        if key.prefix in self._by_prefix:\n            raise DuplicateKeyPrefixError(key.prefix)\n", ""),
     ("R01b duplicate id accepted", REPO, "        if key.id in self._prefix_by_id:\n", "        if False:\n"),
     ("R02 revoke ignores tenant", REPO, "if key is None or key.tenant_id != tenant_id:", "if key is None:"),
-    ("R03 revoke not idempotent", REPO, "        if key.revoked_at is not None:\n            return key\n", ""),
+    ("R03 revoke not idempotent", REPO, "        if key.revoked_at is not None:\n            return RevokeOutcome.ALREADY_REVOKED, key\n", ""),
     ("R04 revoke not persisted", REPO, "        self._by_prefix[key.prefix] = revoked\n", ""),
     ("R05 list not filtered by tenant", REPO, "if k.tenant_id == tenant_id]", "]"),
     ("R06 list newest first", REPO, "key=lambda k: (k.created_at, k.id))", "key=lambda k: (k.created_at, k.id), reverse=True)"),

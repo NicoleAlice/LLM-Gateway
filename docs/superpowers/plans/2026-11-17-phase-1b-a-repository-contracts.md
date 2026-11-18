@@ -154,6 +154,10 @@ async def test_route_no_longer_checks_on_its_own(client):
 
 ---
 
+## Status
+
+Plan A is complete: A1 (`6392241`), A2 (`aa042e7`), A3 (this commit). Implemented as specified, except the A1 changes noted in that task.
+
 ## Plans B and C (outline, written after A ships)
 
 - **B: Anthropic provider** using the official `anthropic` SDK (`AsyncAnthropic`), not raw HTTP. Catalog adds `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5` with prices from the Claude API reference at implementation time. Maps SDK typed errors (rate limit, overloaded/5xx, connection) to `ProviderError`; a `stop_reason == "refusal"` answer is not billed as `ok`. Tests inject a mock transport into the SDK client; no network in CI. An opt-in smoke test runs only when `ANTHROPIC_API_KEY` is set.

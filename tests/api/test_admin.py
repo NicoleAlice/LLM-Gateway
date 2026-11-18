@@ -208,6 +208,45 @@ def test_cannot_revoke_other_tenants_key(client: TestClient) -> None:
     assert client.get("/v1/admin/keys", headers=auth(admin_b)).status_code == 200
 
 
+@pytest.mark.parametrize(
+    ("outcome", "status", "code"),
+    [
+        ("REVOKED", 204, None),
+        ("ALREADY_REVOKED", 204, None),
+        ("NOT_FOUND", 404, "key_not_found"),
+        ("LAST_ADMIN", 409, "last_admin_key"),
+    ],
+)
+def test_route_only_maps_the_repository_outcome(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    outcome: str,
+    status: int,
+    code: str | None,
+) -> None:
+    from llm_gateway.auth.repository import RevokeOutcome
+
+    _, admin = bootstrap(client)
+    keys = client.app.state.gateway.keys  # type: ignore[attr-defined]
+    calls: list[tuple[object, ...]] = []
+
+    async def fake_revoke(tenant_id: str, key_id: str, now: object, **kw: object) -> object:
+        calls.append((tenant_id, key_id, kw))
+        return RevokeOutcome[outcome], None
+
+    async def no_listing(tenant_id: str) -> object:
+        raise AssertionError("the route must not decide on its own")
+
+    monkeypatch.setattr(keys, "revoke", fake_revoke)
+    monkeypatch.setattr(keys, "list_for_tenant", no_listing)
+    r = client.delete("/v1/admin/keys/some-key", headers=auth(admin))
+    assert r.status_code == status
+    if code is not None:
+        assert r.json()["error"]["code"] == code
+    [(_, key_id, kw)] = calls
+    assert key_id == "some-key" and kw == {"keep_one_admin": True}
+
+
 def test_cannot_revoke_last_admin_key(client: TestClient) -> None:
     _, admin = bootstrap(client)
     r = client.delete(f"/v1/admin/keys/{find_key_id(client, admin, admin)}", headers=auth(admin))

@@ -20,18 +20,19 @@ pattern fails loudly instead of reporting a false "killed".
 | `task1.py` | settings, app factory, tooling config | 14 | 14 | 0 |
 | `task2.py` | request/response models, fake provider | 28 | 28 | 0 |
 | `task3.py` | API keys, hashing, key and tenant repositories | 33 | 33 | 0 |
-| `task4.py` | error contract, auth, roles, admin endpoints, body limit | 43 | 43 | 0 |
+| `task4.py` | error contract, auth, roles, admin endpoints, body limit | 39 | 39 | 0 |
 | `task5.py` | routing rules and endpoints | 25 | 25 | 0 |
 | `task6.py` | date-effective pricing, cost | 17 | 17 | 0 |
 | `task7.py` | `/v1/chat`, audit writes, cancellation, failure paths | 39 | 38 | 1 |
 | `task8.py` | `/v1/audit`, `/v1/usage`, time windows, UTC | 18 | 18 | 0 |
 | `task_a1.py` | keyset pagination, cursor codec (Phase 1b-A) | 22 | 22 | 0 |
 | `task_a2.py` | usage aggregated by the repository (Phase 1b-A) | 14 | 14 | 0 |
-| **Total** | | **253** | **252** | **1** |
+| `task_a3.py` | atomic revoke, last-admin rule (Phase 1b-A) | 13 | 13 | 0 |
+| **Total** | | **262** | **261** | **1** |
 
-`task8.py` had 26 mutants; its 8 aggregation mutants (S01-S08) targeted code that moved
-from the `/v1/usage` route into the repository in task A2, so they now live, retargeted,
-in `task_a2.py`.
+Some mutants moved when their target moved: `task8.py` had 26 (its aggregation mutants
+S01-S08 now live, retargeted, in `task_a2.py`), and `task4.py` had 43 (its last-admin
+mutants A08-A10 and A13 now live in `task_a3.py`).
 
 The survivor, `N02` in `task7.py`, is an **equivalent mutant**: it changes the default
 `error_code` of a chat outcome, but every exception path sets a code and the success path
