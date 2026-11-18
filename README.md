@@ -4,7 +4,7 @@
 
 A multi-tenant gateway that sits between applications and LLM providers and controls **who can call which model, what each call costs, and what happened on every call**.
 
-> **Status:** Phase 1 (in-memory) is complete: keys, roles, routing, date-effective billing, `/v1/chat` and an audit row for every chat attempt, behind 258 tests, plus keyset pagination for the audit trail. Storage is in memory and the only provider is a built-in fake; PostgreSQL and a real Anthropic provider are next. See the [roadmap](#roadmap).
+> **Status:** Phase 1 (in-memory) is complete: keys, roles, routing, date-effective billing, `/v1/chat` and an audit row for every chat attempt, behind 301 tests, plus keyset pagination for the audit trail. The Anthropic provider (official SDK) is written and tested against a mocked HTTP transport, but not yet wired into the app, so a running server still only has the built-in fake provider; wiring it in comes next, then PostgreSQL. Storage is in memory. See the [roadmap](#roadmap).
 
 ## Features
 
@@ -16,7 +16,8 @@ A multi-tenant gateway that sits between applications and LLM providers and cont
 | **Audit trail**: one row per attempt, failures included (model, provider, tokens, cost, latency) | ✅ |
 | **Usage-based billing**: date-effective prices; only answered calls are billed | ✅ |
 | **One error contract** for every response, including 404, 413, 422 and 500 | ✅ |
-| PostgreSQL storage, Anthropic provider | planned (next) |
+| **Anthropic provider** (official SDK): caller errors are 400, upstream failures 502, refusals billed and flagged, no upstream text in errors or logs | adapter ✅, wiring next |
+| PostgreSQL storage | planned |
 | **Keyset pagination** for `/v1/audit` (`limit`, opaque `cursor`) | ✅ |
 | Quotas and budgets, SSE streaming, OpenTelemetry, Prometheus | planned (Phase 2) |
 | Docker Compose, Helm chart | planned (Phase 3) |
@@ -137,6 +138,8 @@ Every error has the same shape: `{"error": {"code": "...", "message": "..."}}`.
 
 **Only answered calls are billed.** A call's audit row starts as a failure and becomes billable only as the very last step, after the provider answered and the response was built. A failure anywhere before that (unknown model, missing price, provider error, a crash while building the response) is recorded with cost 0. An early version marked the call billable before building the response; a review reproduced a request that returned 500 but was billed in full, and that ordering is now pinned by a test.
 
+**Provider errors are classified, never echoed.** When Anthropic says the request itself is invalid (HTTP 400/422), the caller gets 400 `provider_rejected_request`; anything else (rate limit, overload, 5xx, auth, network, an unparseable answer) is 502 `provider_error`. Neither is billed. Upstream error messages can quote the prompt, so only the exception's type name reaches a log line, and the gateway's errors are raised with no exception chained behind them, so an error tracker can't pick up the upstream text either. A refusal is an answer: it comes back with `stop_reason: "refusal"` and is billed for the tokens the provider charged.
+
 **One audit row per chat attempt, and the audit never under-reports a bill.** Every `/v1/chat` request that passes authentication and validation writes one row, in `finally`, inside an `anyio` scope shielded from cancellation and bounded by a timeout, so a request cancelled mid-call (for example during shutdown) still leaves its row, and a hung store can't hold shutdown forever. A test cancels the route mid-call (hanging provider, a store that really awaits) and checks that the row is kept and the cancellation re-raised. Writing the row never masks the original error. If a row can't be written, it is logged with a reconciliation line (tokens and cost, no prompt), and an *answered* call **fails closed** (500 `audit_unavailable`, answer not returned). The only unaudited path is a clock that itself fails. Storage is still in memory, so rows don't survive a restart until Phase 1b.
 
 **Prices are resolved by the call's date.** Each model has a history of prices with an `effective_from` date; a call is billed at the price in force on its own (UTC) date, so a price change mid-month bills each call correctly. One clock reading per request sets both the price date and the audit timestamp. Money is `Decimal` end to end, never `float`, rounded to a micro-dollar with `ROUND_HALF_UP`. A model with no price today is refused (503) **before** the provider is called.
@@ -154,12 +157,12 @@ Every error has the same shape: `{"error": {"code": "...", "message": "..."}}`.
 ## How it was built and tested
 
 - **Test-first, task by task**, from a written plan ([docs/superpowers/plans/](docs/superpowers/plans/2026-11-17-phase-1-core.md)).
-- **Mutation testing** on every task: the code is deliberately broken in 262 specific ways (accept revoked keys, bill failed calls, skip the secret check, drop the cancellation shield, repeat a row across pages…) to prove the tests catch each one. On the current code 261 are caught; the remaining one is a documented equivalent mutant (a default value no code path can observe). The scripts and results are in [docs/mutation/](docs/mutation/README.md).
+- **Mutation testing** on every task: the code is deliberately broken in 305 specific ways (accept revoked keys, bill failed calls, skip the secret check, drop the cancellation shield, repeat a row across pages…) to prove the tests catch each one. On the current code 304 are caught; the remaining one is a documented equivalent mutant (a default value no code path can observe). The scripts and results are in [docs/mutation/](docs/mutation/README.md).
 - **An independent adversarial review** of every security-relevant change, then a fix and a test for each finding.
 - **CI** on every push to `main` and every pull request: `ruff check`, `ruff format --check`, `mypy` (strict) and `pytest` with coverage.
 
 ```bash
-uv run pytest              # 258 tests
+uv run pytest              # 301 tests
 uv run mypy                # strict
 uv run ruff check . && uv run ruff format --check .
 ```
@@ -167,7 +170,7 @@ uv run ruff check . && uv run ruff format --check .
 ## Roadmap
 
 - [x] **Phase 1a: core, in memory**: tenants, API keys, RBAC, revocation, routing rules, `/v1/chat`, audit, date-effective billing, fake provider
-- [ ] **Phase 1b: persistence and a real provider**: ~~keyset pagination for `/v1/audit`~~, ~~usage aggregated by the repository~~ and ~~an atomic last-admin check~~ (done), Anthropic provider, PostgreSQL + Alembic
+- [ ] **Phase 1b: persistence and a real provider**: ~~keyset pagination for `/v1/audit`~~, ~~usage aggregated by the repository~~ and ~~an atomic last-admin check~~ and ~~the Anthropic provider adapter~~ (done), provider timeout and wiring, PostgreSQL + Alembic
 - [ ] **Phase 2: FinOps and operations**: quotas and budgets, SSE streaming, OpenTelemetry traces, Prometheus metrics, rate limiting
 - [ ] **Phase 3: deployment**: Dockerfile, Docker Compose, Helm chart tested on `kind`
 

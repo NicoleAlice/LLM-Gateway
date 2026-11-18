@@ -54,10 +54,18 @@ class ChatResponse(BaseModel):
     model: str
     content: str
     usage: Usage
+    # Why the model stopped, as the provider reports it ("end_turn", "max_tokens",
+    # "refusal", ...). A refusal is still an answer: it is billed for the tokens used.
+    stop_reason: str = "end_turn"
 
 
 class ProviderError(Exception):
     """The provider could not answer (network, upstream error, refusal to serve)."""
+
+
+class ProviderRejectedRequest(ProviderError):
+    """The provider refused the request itself as invalid (HTTP 400/422): the caller's
+    fault, so a 400 rather than a 502. Nothing was answered, so nothing is billed."""
 
 
 class Provider(Protocol):

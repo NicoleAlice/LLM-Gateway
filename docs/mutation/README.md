@@ -13,7 +13,7 @@ uv run python -I docs/mutation/task4.py .
 Every script asserts that each mutation pattern exists and is not a no-op, so a stale
 pattern fails loudly instead of reporting a false "killed".
 
-## Results on the current code (2026-11-17)
+## Results on the current code (2026-11-18)
 
 | Script | Area | Mutants | Killed | Survived |
 |---|---|---:|---:|---:|
@@ -28,11 +28,15 @@ pattern fails loudly instead of reporting a false "killed".
 | `task_a1.py` | keyset pagination, cursor codec (Phase 1b-A) | 22 | 22 | 0 |
 | `task_a2.py` | usage aggregated by the repository (Phase 1b-A) | 14 | 14 | 0 |
 | `task_a3.py` | atomic revoke, last-admin rule (Phase 1b-A) | 13 | 13 | 0 |
-| **Total** | | **262** | **261** | **1** |
+| `task_b1.py` | Anthropic provider, error mapping, 400 for rejected requests (Phase 1b-B) | 43 | 43 | 0 |
+| **Total** | | **305** | **304** | **1** |
 
 Some mutants moved when their target moved: `task8.py` had 26 (its aggregation mutants
 S01-S08 now live, retargeted, in `task_a2.py`), and `task4.py` had 43 (its last-admin
 mutants A08-A10 and A13 now live in `task_a3.py`).
+
+`task_b1.py` runs pytest with its own interpreter instead of `uv run`, so a failed
+environment sync can't be counted as a killed mutant.
 
 The survivor, `N02` in `task7.py`, is an **equivalent mutant**: it changes the default
 `error_code` of a chat outcome, but every exception path sets a code and the success path

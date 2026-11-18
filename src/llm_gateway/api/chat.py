@@ -28,7 +28,7 @@ from llm_gateway.audit.records import AuditRecord, AuditStatus
 from llm_gateway.auth.deps import Principal, require_role
 from llm_gateway.auth.keys import Role
 from llm_gateway.billing.pricing import MICRO_USD, NoPriceError, cost
-from llm_gateway.providers.base import ChatRequest, ChatResponse, Usage
+from llm_gateway.providers.base import ChatRequest, ChatResponse, ProviderRejectedRequest, Usage
 from llm_gateway.routing.rules import UnknownModelError, resolve_model
 from llm_gateway.state import AppState, get_state
 
@@ -46,6 +46,7 @@ class ChatResult(BaseModel):
     model: str
     content: str
     usage: Usage
+    stop_reason: str  # "refusal" means the model declined; the tokens are still billed
     cost_usd: str
 
 
@@ -165,16 +166,32 @@ async def _answer(
         raise ApiError(503, "pricing_unavailable", "this model has no price today") from None
 
     outcome.provider = provider_name
+    failure: ApiError | None = None
     try:
         raw = await provider.chat(body, model)
         # Re-validate: a buggy provider must not bill negative tokens or return junk.
         answer = ChatResponse.model_validate(raw.model_dump())
+    # The exception type only, in logs and responses: upstream messages may echo prompts.
+    except ProviderRejectedRequest as exc:
+        # The provider says the request itself is invalid: the caller can fix it, so 400.
+        logger.warning(
+            "provider %s rejected a request for model %s: %s",
+            provider_name,
+            model,
+            type(exc).__name__,
+        )
+        failure = ApiError(
+            400, "provider_rejected_request", "the model provider rejected the request"
+        )
     except Exception as exc:
-        # The exception type only: upstream messages may echo prompt content.
         logger.warning(
             "provider %s failed for model %s: %s", provider_name, model, type(exc).__name__
         )
-        raise ApiError(502, "provider_error", "the model provider failed to answer") from None
+        failure = ApiError(502, "provider_error", "the model provider failed to answer")
+    if failure is not None:
+        # Raised outside the except block, so the provider's exception (and whatever
+        # upstream text it holds) is not attached as __context__.
+        raise failure
 
     amount = cost(answer.usage, price)
     result = ChatResult(
@@ -182,6 +199,7 @@ async def _answer(
         model=answer.model,
         content=answer.content,
         usage=answer.usage,
+        stop_reason=answer.stop_reason,
         cost_usd=str(amount),
     )
     # Last step, after everything that could fail: only now is the call billable.

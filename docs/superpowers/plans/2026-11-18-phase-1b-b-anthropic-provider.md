@@ -50,7 +50,7 @@ Anthropic recommends enabling server-side refusal fallbacks (`fallbacks: "defaul
 - Error mapping (most specific first): `BadRequestError`, `UnprocessableEntityError` → `ProviderRejectedRequest`; `RateLimitError`, `InternalServerError` (incl. `OverloadedError`), `APIConnectionError` (incl. timeouts), `AuthenticationError`, `PermissionDeniedError`, `NotFoundError`, any other `APIStatusError` → `ProviderError`. The provider never puts upstream messages in the exception text it raises.
 - Chat route: `ProviderRejectedRequest` → 400 `provider_rejected_request`, audited, cost 0, provider not billed.
 
-**Tests (mock transport):** request body shape (`model`, `max_tokens`, `system`, messages, no sampling or thinking params), API key sent only as `x-api-key`; text extraction skipping thinking; usage and stop_reason; `refusal` answer billed with `stop_reason: "refusal"` in the API response; each status (400, 401, 403, 404, 422, 429, 500, 529) and a connection error mapped as above, with the upstream message absent from the raised error; end-to-end `/v1/chat` through the provider with a mocked transport, audited and billed at the model's price.
+**Tests (mock transport):** request body shape (`model`, `max_tokens`, `system`, messages, no sampling or thinking params), API key sent only in the `Authorization: Bearer` header (SDK 2.x; 1.x used `x-api-key`, corrected during B1); text extraction skipping thinking; usage and stop_reason; `refusal` answer billed with `stop_reason: "refusal"` in the API response; each status (400, 401, 403, 404, 422, 429, 500, 529) and a connection error mapped as above, with the upstream message absent from the raised error; end-to-end `/v1/chat` through the provider with a mocked transport, audited and billed at the model's price.
 
 ---
 
@@ -71,11 +71,11 @@ Note to document: a non-streaming call cancelled by the gateway may still be com
 **Files:** Modify `src/llm_gateway/main.py` (lifespan), `src/llm_gateway/state.py`, README (Quickstart: how to enable Claude; Features table), `docs/mutation/task_b3.py`.
 
 **Interfaces:**
-- When `Settings.anthropic_api_key` is set: build `AsyncAnthropic(api_key=..., max_retries=2, timeout=provider_timeout_s)`, register `providers["anthropic"]`, catalog entries `claude-opus-5-5` and `claude-sonnet-5-5` → `"anthropic"`, and their prices effective from 2026-11-03. Close the client in the app lifespan.
+- When `Settings.anthropic_api_key` is set: build `AsyncAnthropic(api_key=..., max_retries=2, timeout=provider_timeout_s)`, register `providers["anthropic"]`, catalog entries `claude-opus-5-5` and `claude-sonnet-5-5` → `"anthropic"`, and their prices effective from 2026-11-03. Close the client in the app lifespan. Pin the `anthropic` and `httpx2` loggers at `WARNING` (found in the B1 review: at DEBUG, or with `ANTHROPIC_LOG=debug`, the SDK logs request options including the prompt text).
 - Without a key nothing changes: the models are absent, so asking for one is a 400 `unknown_model`.
 - `create_app(..., anthropic_client: AsyncAnthropic | None = None)` lets tests inject a client with a mock transport.
 
-**Tests:** with and without a key (catalog, prices, provider present or absent); client closed on shutdown; the key never appears in logs, errors or `repr`.
+**Tests:** with root logging at DEBUG, a chat call leaves no prompt text in the log; with and without a key (catalog, prices, provider present or absent); client closed on shutdown; the key never appears in logs, errors or `repr`.
 
 ---
 

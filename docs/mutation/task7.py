@@ -10,10 +10,12 @@ CHAT, AUD, STATE = S / "api" / "chat.py", S / "audit" / "records.py", S / "state
 PRICE_THEN_CALL = (
     "    try:\n        price = state.prices.price_for(model, today)\n    except NoPriceError:\n"
     '        raise ApiError(503, "pricing_unavailable", "this model has no price today") from None\n'
-    "\n    outcome.provider = provider_name\n    try:\n        raw = await provider.chat(body, model)\n"
+    "\n    outcome.provider = provider_name\n    failure: ApiError | None = None\n"
+    "    try:\n        raw = await provider.chat(body, model)\n"
 )
 CALL_THEN_PRICE = (
-    "    outcome.provider = provider_name\n    raw0 = await provider.chat(body, model)\n"
+    "    outcome.provider = provider_name\n    failure: ApiError | None = None\n"
+    "    raw0 = await provider.chat(body, model)\n"
     "    try:\n        price = state.prices.price_for(model, today)\n    except NoPriceError:\n"
     '        raise ApiError(503, "pricing_unavailable", "this model has no price today") from None\n'
     "\n    try:\n        raw = raw0\n"
@@ -32,7 +34,7 @@ MUTANTS = [
     ("C06 failed calls billed", CHAT, "    cost_usd: Decimal = ZERO_COST\n", '    cost_usd: Decimal = Decimal("0.000001")\n'),
     ("C07 cancel not coded", CHAT, '        return "cancelled"\n', '        return "internal_error"\n'),
     ("C08 ApiError code ignored", CHAT, "        return exc.code\n", '        return "internal_error"\n'),
-    ("C09 only ProviderError mapped", CHAT, "        answer = ChatResponse.model_validate(raw.model_dump())\n    except Exception as exc:", "        answer = ChatResponse.model_validate(raw.model_dump())\n    except LookupError as exc:"),
+    ("C09 only ProviderError mapped", CHAT, "    except Exception as exc:\n        logger.warning(\n            \"provider %s failed", "    except LookupError as exc:\n        logger.warning(\n            \"provider %s failed"),
     ("C10 stale rule reported as unknown_model", CHAT, "        if exc.from_rule:\n", "        if False:\n"),
     ("C11 audit keeps requested model", CHAT, "        outcome.model = exc.model\n", "        pass\n"),
     ("C12 missing provider is KeyError", CHAT, "    provider = state.providers.get(provider_name)\n", "    provider = state.providers[provider_name]\n"),
@@ -55,7 +57,7 @@ MUTANTS = [
     ("N06 timeout not detected", CHAT, "    if scope.cancelled_caught:\n", "    if False:\n"),
     ("N07 provider response not revalidated", CHAT, "        answer = ChatResponse.model_validate(raw.model_dump())\n", "        answer = raw\n"),
     ("N08 provider log leaks message", CHAT, "provider_name, model, type(exc).__name__", "provider_name, model, f\"{type(exc).__name__}: {exc}\""),
-    ("N09 provider failure not logged", CHAT, "        logger.warning(\n", "        (lambda *a: None)(\n"),
+    ("N09 provider failure not logged", CHAT, "        logger.warning(\n            \"provider %s failed", "        (lambda *a: None)(\n            \"provider %s failed"),
     ("N10 reconcile line omits cost", CHAT, ' cost={record.cost_usd}"', '"'),
     ("N11 unanswered call handed out on audit failure", CHAT, '            raise ApiError(500, "audit_unavailable", "the request could not be recorded")\n', "            pass\n"),
     ("U01 audit window closed", AUD, "start <= r.created_at < end", "start <= r.created_at <= end"),
