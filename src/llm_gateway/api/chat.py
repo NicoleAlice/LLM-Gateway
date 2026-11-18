@@ -20,6 +20,7 @@ from time import perf_counter
 from typing import Annotated
 
 import anyio
+import anyio.lowlevel
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
@@ -166,32 +167,41 @@ async def _answer(
         raise ApiError(503, "pricing_unavailable", "this model has no price today") from None
 
     outcome.provider = provider_name
-    failure: ApiError | None = None
+    timeout_s = state.settings.provider_timeout_s
+    answered = False
+    error: type[Exception] | None = None  # the type only: its text may echo the prompt
     try:
-        raw = await provider.chat(body, model)
-        # Re-validate: a buggy provider must not bill negative tokens or return junk.
-        answer = ChatResponse.model_validate(raw.model_dump())
-    # The exception type only, in logs and responses: upstream messages may echo prompts.
-    except ProviderRejectedRequest as exc:
+        # Our own deadline, told apart from a TimeoutError the provider raises itself.
+        with anyio.move_on_after(timeout_s) as deadline:
+            raw = await provider.chat(body, model)
+            # Re-validate: a buggy provider must not bill negative tokens or return junk.
+            answer = ChatResponse.model_validate(raw.model_dump())
+            answered = True
+    except Exception as exc:
+        error = type(exc)
+    # A provider that turned an *outer* cancellation (client gone, shutdown) into an
+    # ordinary error must not hide it: re-raise it here, so it is audited as "cancelled".
+    await anyio.lowlevel.checkpoint_if_cancelled()
+    # Each ApiError is raised outside the except block, so the provider's exception (and
+    # whatever upstream text it holds) is not attached as __context__.
+    if not answered and deadline.cancel_called:
+        # The deadline fired, whether the call then ended in a cancellation or in some
+        # other error the cancellation caused. Not billed: we never saw the usage. The
+        # provider may still have completed and charged the call; rows with this code
+        # are the ones to reconcile against its own usage report.
+        logger.warning(
+            "provider %s timed out for model %s after %g s", provider_name, model, timeout_s
+        )
+        raise ApiError(504, "provider_timeout", "the model provider did not answer in time")
+    if error is not None and issubclass(error, ProviderRejectedRequest):
         # The provider says the request itself is invalid: the caller can fix it, so 400.
         logger.warning(
-            "provider %s rejected a request for model %s: %s",
-            provider_name,
-            model,
-            type(exc).__name__,
+            "provider %s rejected a request for model %s: %s", provider_name, model, error.__name__
         )
-        failure = ApiError(
-            400, "provider_rejected_request", "the model provider rejected the request"
-        )
-    except Exception as exc:
-        logger.warning(
-            "provider %s failed for model %s: %s", provider_name, model, type(exc).__name__
-        )
-        failure = ApiError(502, "provider_error", "the model provider failed to answer")
-    if failure is not None:
-        # Raised outside the except block, so the provider's exception (and whatever
-        # upstream text it holds) is not attached as __context__.
-        raise failure
+        raise ApiError(400, "provider_rejected_request", "the model provider rejected the request")
+    if error is not None:
+        logger.warning("provider %s failed for model %s: %s", provider_name, model, error.__name__)
+        raise ApiError(502, "provider_error", "the model provider failed to answer")
 
     amount = cost(answer.usage, price)
     result = ChatResult(

@@ -29,13 +29,14 @@ pattern fails loudly instead of reporting a false "killed".
 | `task_a2.py` | usage aggregated by the repository (Phase 1b-A) | 14 | 14 | 0 |
 | `task_a3.py` | atomic revoke, last-admin rule (Phase 1b-A) | 13 | 13 | 0 |
 | `task_b1.py` | Anthropic provider, error mapping, 400 for rejected requests (Phase 1b-B) | 43 | 43 | 0 |
-| **Total** | | **305** | **304** | **1** |
+| `task_b2.py` | provider timeout, its setting, 504 vs 502, late answers (Phase 1b-B) | 20 | 20 | 0 |
+| **Total** | | **325** | **324** | **1** |
 
 Some mutants moved when their target moved: `task8.py` had 26 (its aggregation mutants
 S01-S08 now live, retargeted, in `task_a2.py`), and `task4.py` had 43 (its last-admin
 mutants A08-A10 and A13 now live in `task_a3.py`).
 
-`task_b1.py` runs pytest with its own interpreter instead of `uv run`, so a failed
+`task_b1.py` and `task_b2.py` run pytest with their own interpreter instead of `uv run`, so a failed
 environment sync can't be counted as a killed mutant.
 
 The survivor, `N02` in `task7.py`, is an **equivalent mutant**: it changes the default

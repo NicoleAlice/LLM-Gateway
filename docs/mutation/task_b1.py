@@ -47,17 +47,17 @@ MUTANTS = [
     ("E08 only SDK errors caught", PROV, "        except Exception as exc:\n", "        except anthropic.AnthropicError as exc:\n"),
     ("E09 rejection not a ProviderError", BASE, "class ProviderRejectedRequest(ProviderError):", "class ProviderRejectedRequest(Exception):"),
     # Route
-    ("C01 rejection mapped to 502", CHAT, "    except ProviderRejectedRequest as exc:\n", "    except ZeroDivisionError as exc:\n"),
+    ('C01 rejection mapped to 502', CHAT, '    if error is not None and issubclass(error, ProviderRejectedRequest):\n', '    if False:\n'),
     ("C02 rejection status 422", CHAT, '400, "provider_rejected_request"', '422, "provider_rejected_request"'),
     ("C03 rejection code wrong", CHAT, '400, "provider_rejected_request"', '400, "bad_request"'),
     ("C04 stop_reason not exposed", CHAT, "        stop_reason=answer.stop_reason,\n", '        stop_reason="end_turn",\n'),
     ("C05 default stop_reason wrong", BASE, '    stop_reason: str = "end_turn"\n', '    stop_reason: str = "stop"\n'),
     ("C06 refusal not billed", CHAT, "    outcome.usage, outcome.cost_usd = answer.usage, amount\n", "    outcome.usage, outcome.cost_usd = answer.usage, (amount if answer.stop_reason != \"refusal\" else ZERO_COST)\n"),
-    ("C07 rejection logged with its message", CHAT, "            model,\n            type(exc).__name__,\n        )", "            model,\n            exc,\n        )"),
-    ("C08 rejection logged without provider/model", CHAT, '"provider %s rejected a request for model %s: %s",\n            provider_name,\n            model,', '"provider %s rejected a request for model %s: %s",\n            "?",\n            "?",'),
-    ("C09 rejection raised with provider context", CHAT, '            400, "provider_rejected_request", "the model provider rejected the request"\n        )\n', '            400, "provider_rejected_request", "the model provider rejected the request"\n        )\n        raise failure\n'),
-    ("C10 failure raised with provider context", CHAT, '        failure = ApiError(502, "provider_error", "the model provider failed to answer")\n', '        failure = ApiError(502, "provider_error", "the model provider failed to answer")\n        raise failure\n'),
-    ("C11 failure not raised", CHAT, "    if failure is not None:\n", "    if False:\n"),
+    ('C07 rejection log loses the type name', CHAT, '"provider %s rejected a request for model %s: %s", provider_name, model, error.__name__', '"provider %s rejected a request for model %s: %s", provider_name, model, error'),
+    ('C08 rejection logged without provider/model', CHAT, '"provider %s rejected a request for model %s: %s", provider_name, model, error.__name__', '"provider %s rejected a request for model %s: %s", "?", "?", error.__name__'),
+    ('C09 rejection raised with provider context', CHAT, '    except Exception as exc:\n        error = type(exc)\n', '    except Exception as exc:\n        error = type(exc)\n        if issubclass(error, ProviderRejectedRequest):\n            raise ApiError(400, "provider_rejected_request", "the model provider rejected the request")\n'),
+    ('C10 failure raised with provider context', CHAT, '    except Exception as exc:\n        error = type(exc)\n', '    except Exception as exc:\n        error = type(exc)\n        if not issubclass(error, ProviderRejectedRequest):\n            raise ApiError(502, "provider_error", "the model provider failed to answer")\n'),
+    ('C11 failure not raised', CHAT, '    if error is not None:\n        logger.warning("provider %s failed', '    if False:\n        logger.warning("provider %s failed'),
 ]
 
 CMD = [sys.executable, "-m", "pytest", "-q", "-x", "-p", "no:warnings", "-p", "no:cacheprovider"]

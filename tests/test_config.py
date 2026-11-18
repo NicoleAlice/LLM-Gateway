@@ -43,3 +43,26 @@ def test_empty_anthropic_key_means_not_configured(monkeypatch: pytest.MonkeyPatc
 
 def test_app_uses_injected_clock(client: TestClient, fixed_now: datetime) -> None:
     assert client.app.state.gateway.clock() == fixed_now  # type: ignore[attr-defined]
+
+
+def test_provider_timeout_defaults_to_120_seconds(settings: Settings) -> None:
+    assert settings.provider_timeout_s == 120
+
+
+@pytest.mark.parametrize(("raw", "seconds"), [("1", 1.0), ("30.5", 30.5), ("600", 600.0)])
+def test_provider_timeout_read_from_env(
+    monkeypatch: pytest.MonkeyPatch, raw: str, seconds: float
+) -> None:
+    monkeypatch.setenv("LLMGW_ADMIN_TOKEN", "x" * 16)
+    monkeypatch.setenv("LLMGW_PROVIDER_TIMEOUT_S", raw)
+    assert Settings(_env_file=None).provider_timeout_s == seconds
+
+
+@pytest.mark.parametrize("raw", ["0", "0.99", "600.01", "-5", "nan", "inf", "soon"])
+def test_provider_timeout_out_of_bounds_is_rejected(
+    monkeypatch: pytest.MonkeyPatch, raw: str
+) -> None:
+    monkeypatch.setenv("LLMGW_ADMIN_TOKEN", "x" * 16)
+    monkeypatch.setenv("LLMGW_PROVIDER_TIMEOUT_S", raw)
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)

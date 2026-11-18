@@ -16,3 +16,5 @@ class Settings(BaseSettings):
     default_model: str = "fake-echo"
     anthropic_api_key: SecretStr | None = None
     max_body_bytes: int = Field(1_048_576, ge=1024)  # 1 MiB; bodies above it get 413
+    # A provider call that hasn't answered after this many seconds is cut off (504).
+    provider_timeout_s: float = Field(120, ge=1, le=600)

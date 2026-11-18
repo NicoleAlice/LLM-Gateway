@@ -58,7 +58,7 @@ Anthropic recommends enabling server-side refusal fallbacks (`fallbacks: "defaul
 
 **Files:** Modify `src/llm_gateway/config.py` (`provider_timeout_s: float = Field(120, ge=1, le=600)`), `src/llm_gateway/api/chat.py`, README (API table: replace "there is no provider timeout yet" with the real bound), `docs/mutation/task_b2.py`.
 
-**Interfaces:** the provider call runs inside `anyio.fail_after(settings.provider_timeout_s)`; expiry → 504 `provider_timeout`, audited, cost 0. The SDK client gets the same timeout so it doesn't keep a socket open beyond it.
+**Interfaces:** the provider call runs inside `anyio.move_on_after(settings.provider_timeout_s)` (implemented that way instead of `fail_after`, so a `TimeoutError` the provider raises itself stays a 502); if the deadline fired and no answer came back, 504 `provider_timeout`, audited, cost 0. An answer that arrives anyway is returned and billed. After the call, `anyio.lowlevel.checkpoint_if_cancelled()` re-raises an outer cancellation a provider may have turned into an ordinary error. The SDK client gets the same timeout so it doesn't keep a socket open beyond it.
 
 **Tests:** a hanging fake provider with a tiny timeout → 504 and one audit row; timeout bounds validated; the cancellation shield on the audit write still works (the timeout cancels the provider call, not the audit write).
 
@@ -84,3 +84,10 @@ Note to document: a non-streaming call cancelled by the gateway may still be com
 **Files:** Create `tests/live/test_anthropic_live.py`; modify `pyproject.toml` (marker `live`, excluded by default via `-m "not live"`), README.
 
 One short request to `claude-opus-5-5` with `max_tokens=32`; asserts a text answer, non-zero usage and a billed audit row. Skipped unless `LLMGW_LIVE_TESTS=1` and `ANTHROPIC_API_KEY` are both set. Never run in CI. Costs a fraction of a cent per run, but it is a real charge: run it only when asked.
+
+---
+
+## Follow-ups found in review (not in this plan)
+
+- **Native cancellation through the audit shield** (B2 review, pre-existing): the shielded audit write survives anyio cancellation, but a native `task.cancel()` landing during the write (uvicorn does this when the graceful-shutdown timeout runs out) passes through the shield and the row is lost. Fix candidate: write the row from a task the request doesn't own, or retry the write once on `CancelledError` and re-raise. Belongs with the PostgreSQL plan, where writes are slow enough to matter.
+- **Export-window bound and routing lookup:** the bound "provider timeout + 5 s" assumes the routing lookup is instant. With PostgreSQL, bound it too (or put one deadline around the whole call path).
