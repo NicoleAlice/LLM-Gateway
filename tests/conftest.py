@@ -11,8 +11,9 @@ from llm_gateway.main import create_app
 
 @pytest.fixture(autouse=True)
 def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Keep the developer's shell from leaking any LLMGW_* setting into tests."""
-    for var in [name for name in os.environ if name.upper().startswith("LLMGW_")]:
+    """Keep the developer's shell from leaking LLMGW_* or ANTHROPIC_* settings into tests
+    (the SDK reads ANTHROPIC_BASE_URL, ANTHROPIC_CUSTOM_HEADERS, ANTHROPIC_LOG, ...)."""
+    for var in [n for n in os.environ if n.upper().startswith(("LLMGW_", "ANTHROPIC_"))]:
         monkeypatch.delenv(var)
 
 

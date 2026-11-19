@@ -35,10 +35,20 @@ def test_surrounding_whitespace_is_not_part_of_the_token(monkeypatch: pytest.Mon
     assert Settings(_env_file=None).admin_token.get_secret_value() == "x" * 16
 
 
-def test_empty_anthropic_key_means_not_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("raw", ["", "   ", "\n", "\t \r\n"])
+def test_empty_anthropic_key_means_not_configured(
+    monkeypatch: pytest.MonkeyPatch, raw: str
+) -> None:
     monkeypatch.setenv("LLMGW_ADMIN_TOKEN", "x" * 16)
-    monkeypatch.setenv("LLMGW_ANTHROPIC_API_KEY", "")
+    monkeypatch.setenv("LLMGW_ANTHROPIC_API_KEY", raw)
     assert Settings(_env_file=None).anthropic_api_key is None
+
+
+def test_a_real_anthropic_key_is_kept(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLMGW_ADMIN_TOKEN", "x" * 16)
+    monkeypatch.setenv("LLMGW_ANTHROPIC_API_KEY", " sk-ant-abc \n")
+    key = Settings(_env_file=None).anthropic_api_key
+    assert key is not None and key.get_secret_value() == "sk-ant-abc"
 
 
 def test_app_uses_injected_clock(client: TestClient, fixed_now: datetime) -> None:
@@ -66,3 +76,11 @@ def test_provider_timeout_out_of_bounds_is_rejected(
     monkeypatch.setenv("LLMGW_PROVIDER_TIMEOUT_S", raw)
     with pytest.raises(ValidationError):
         Settings(_env_file=None)
+
+
+def test_an_empty_default_model_means_the_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLMGW_ADMIN_TOKEN", "x" * 16)
+    monkeypatch.setenv("LLMGW_DEFAULT_MODEL", "")
+    settings = Settings(_env_file=None)
+    assert settings.default_model == "fake-echo"
+    assert "default_model" not in settings.model_fields_set

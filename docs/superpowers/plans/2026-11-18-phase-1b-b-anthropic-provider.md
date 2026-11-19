@@ -74,6 +74,7 @@ Note to document: a non-streaming call cancelled by the gateway may still be com
 - When `Settings.anthropic_api_key` is set: build `AsyncAnthropic(api_key=..., max_retries=2, timeout=provider_timeout_s)`, register `providers["anthropic"]`, catalog entries `claude-opus-5-5` and `claude-sonnet-5-5` → `"anthropic"`, and their prices effective from 2026-11-03. Close the client in the app lifespan. Pin the `anthropic` and `httpx2` loggers at `WARNING` (found in the B1 review: at DEBUG, or with `ANTHROPIC_LOG=debug`, the SDK logs request options including the prompt text).
 - Without a key nothing changes: the models are absent, so asking for one is a 400 `unknown_model`.
 - `create_app(..., anthropic_client: AsyncAnthropic | None = None)` lets tests inject a client with a mock transport.
+- Added during the B3 review: an injected client always wins over the key (a test must never get a network client); a blank key (`"   "`) counts as no key; `base_url` is passed explicitly so an `ANTHROPIC_BASE_URL` left in the shell can't redirect the key; the test suite strips `ANTHROPIC_*` as well as `LLMGW_*`; with Claude enabled and no explicit `LLMGW_DEFAULT_MODEL`, the default model is `claude-opus-5-5`. The client is built in `create_app` and closed when the lifespan ends, so each app runs through one lifespan.
 
 **Tests:** with root logging at DEBUG, a chat call leaves no prompt text in the log; with and without a key (catalog, prices, provider present or absent); client closed on shutdown; the key never appears in logs, errors or `repr`.
 

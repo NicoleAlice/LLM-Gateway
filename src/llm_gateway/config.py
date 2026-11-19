@@ -1,4 +1,4 @@
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,3 +18,10 @@ class Settings(BaseSettings):
     max_body_bytes: int = Field(1_048_576, ge=1024)  # 1 MiB; bodies above it get 413
     # A provider call that hasn't answered after this many seconds is cut off (504).
     provider_timeout_s: float = Field(120, ge=1, le=600)
+
+    @field_validator("anthropic_api_key")
+    @classmethod
+    def _blank_key_is_no_key(cls, key: SecretStr | None) -> SecretStr | None:
+        # env_ignore_empty only catches "", and whitespace is stripped after that check:
+        # without this, a key of "   " would enable Claude with an empty credential.
+        return key if key is not None and key.get_secret_value() else None

@@ -27,7 +27,7 @@ MUTANTS = [
     ("U05 calls not reported", USAGE, "            calls=t.calls,\n", "            calls=0,\n"),
 ]
 
-CMD = ["uv", "run", "pytest", "-q", "-x", "-p", "no:warnings"]
+CMD = [sys.executable, "-m", "pytest", "-q", "-x", "-p", "no:warnings"]
 for mid, path, old, new in MUTANTS:
     original = path.read_text(encoding="utf-8")
     assert old in original, f"{mid}: pattern not found"

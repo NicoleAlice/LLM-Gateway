@@ -4,7 +4,7 @@
 
 A multi-tenant gateway that sits between applications and LLM providers and controls **who can call which model, what each call costs, and what happened on every call**.
 
-> **Status:** Phase 1 (in-memory) is complete: keys, roles, routing, date-effective billing, `/v1/chat` and an audit row for every chat attempt, behind 324 tests, plus keyset pagination for the audit trail. The Anthropic provider (official SDK) is written and tested against a mocked HTTP transport, but not yet wired into the app, so a running server still only has the built-in fake provider; wiring it in comes next, then PostgreSQL. Storage is in memory. See the [roadmap](#roadmap).
+> **Status:** Phase 1 (in-memory) is complete: keys, roles, routing, date-effective billing, `/v1/chat` and an audit row for every chat attempt, behind 343 tests, plus keyset pagination for the audit trail. Set `LLMGW_ANTHROPIC_API_KEY` and `/v1/chat` routes to Claude (Opus 5.5 by default, Sonnet 5.5 on request) through the official SDK; without a key it runs on a built-in fake provider. The tests never touch the network. Storage is in memory; PostgreSQL is next. See the [roadmap](#roadmap).
 
 ## Features
 
@@ -12,11 +12,11 @@ A multi-tenant gateway that sits between applications and LLM providers and cont
 |---|---|
 | **Tenants and API keys**: hashed keys, roles (`admin`, `developer`, `viewer`), instant revocation | ✅ |
 | **Model routing**: per-tenant `preferred` / `mandatory` model rules | ✅ |
-| **`POST /v1/chat`**: routed, priced and audited; fake provider for local use | ✅ |
+| **`POST /v1/chat`**: routed, priced and audited; Claude when a key is set, a fake provider otherwise | ✅ |
 | **Audit trail**: one row per attempt, failures included (model, provider, tokens, cost, latency) | ✅ |
 | **Usage-based billing**: date-effective prices; only answered calls are billed | ✅ |
 | **One error contract** for every response, including 404, 413, 422 and 500 | ✅ |
-| **Anthropic provider** (official SDK): caller errors are 400, upstream failures 502, refusals billed and flagged, no upstream text in errors or logs | adapter ✅, wiring next |
+| **Anthropic provider** (official SDK): `claude-opus-5-5` and `claude-sonnet-5-5`; caller errors are 400, upstream failures 502, refusals billed and flagged, no prompt or upstream text in errors or logs | ✅ |
 | **Provider timeout**: a call with no answer after `LLMGW_PROVIDER_TIMEOUT_S` (default 120 s) is cut off with 504, audited, not billed | ✅ |
 | PostgreSQL storage | planned |
 | **Keyset pagination** for `/v1/audit` (`limit`, opaque `cursor`) | ✅ |
@@ -120,6 +120,15 @@ Invoke-RestMethod -Method Delete "$Base/v1/admin/keys/$($viewer.key_id)" -Header
 
 </details>
 
+**Using Claude.** Start the server with an Anthropic API key as well:
+
+```bash
+export LLMGW_ANTHROPIC_API_KEY="sk-ant-..."   # PowerShell: $env:LLMGW_ANTHROPIC_API_KEY = "sk-ant-..."
+uv run uvicorn --factory llm_gateway.main:create_app
+```
+
+Calls then go to `claude-opus-5-5` unless the request (or the tenant's routing rule) names `claude-sonnet-5-5` or `fake-echo`; set `LLMGW_DEFAULT_MODEL` to change the default. They are billed at $4 / $20 (Opus) and $2 / $10 (Sonnet) per million input / output tokens, prices effective 2026-11-03. Real calls cost real money.
+
 Interactive API docs are at `http://127.0.0.1:8000/docs`.
 
 ## API
@@ -158,12 +167,12 @@ Every error has the same shape: `{"error": {"code": "...", "message": "..."}}`.
 ## How it was built and tested
 
 - **Test-first, task by task**, from a written plan ([docs/superpowers/plans/](docs/superpowers/plans/2026-11-17-phase-1-core.md)).
-- **Mutation testing** on every task: the code is deliberately broken in 325 specific ways (accept revoked keys, bill failed calls, skip the secret check, drop the cancellation shield, repeat a row across pages…) to prove the tests catch each one. On the current code 324 are caught; the remaining one is a documented equivalent mutant (a default value no code path can observe). The scripts and results are in [docs/mutation/](docs/mutation/README.md).
+- **Mutation testing** on every task: the code is deliberately broken in 357 specific ways (accept revoked keys, bill failed calls, skip the secret check, drop the cancellation shield, repeat a row across pages…) to prove the tests catch each one. On the current code 356 are caught; the remaining one is a documented equivalent mutant (a default value no code path can observe). The scripts and results are in [docs/mutation/](docs/mutation/README.md).
 - **An independent adversarial review** of every security-relevant change, then a fix and a test for each finding.
 - **CI** on every push to `main` and every pull request: `ruff check`, `ruff format --check`, `mypy` (strict) and `pytest` with coverage.
 
 ```bash
-uv run pytest              # 324 tests
+uv run pytest              # 343 tests
 uv run mypy                # strict
 uv run ruff check . && uv run ruff format --check .
 ```
@@ -171,10 +180,10 @@ uv run ruff check . && uv run ruff format --check .
 ## Roadmap
 
 - [x] **Phase 1a: core, in memory**: tenants, API keys, RBAC, revocation, routing rules, `/v1/chat`, audit, date-effective billing, fake provider
-- [ ] **Phase 1b: persistence and a real provider**: ~~keyset pagination for `/v1/audit`~~, ~~usage aggregated by the repository~~ and ~~an atomic last-admin check~~ and ~~the Anthropic provider adapter~~ and ~~a provider timeout~~ (done), wiring the provider into the app, PostgreSQL + Alembic
+- [ ] **Phase 1b: persistence and a real provider**: done: keyset pagination for `/v1/audit`, usage aggregated by the repository, an atomic last-admin check, the Anthropic provider with a provider timeout. Next: PostgreSQL + Alembic
 - [ ] **Phase 2: FinOps and operations**: quotas and budgets, SSE streaming, OpenTelemetry traces, Prometheus metrics, rate limiting
 - [ ] **Phase 3: deployment**: Dockerfile, Docker Compose, Helm chart tested on `kind`
 
 ## Tech stack
 
-Python 3.12 · FastAPI · Pydantic v2 · anyio · pytest · uv · ruff · mypy (strict) · GitHub Actions. SQLAlchemy, Alembic and PostgreSQL arrive in Phase 1b.
+Python 3.12 · FastAPI · Pydantic v2 · anyio · Anthropic Python SDK · pytest · uv · ruff · mypy (strict) · GitHub Actions. SQLAlchemy, Alembic and PostgreSQL arrive in Phase 1b.

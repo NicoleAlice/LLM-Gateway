@@ -14,7 +14,7 @@ MUTANTS = [
     ("T1-03 env prefix removed", SRC / "config.py", 'env_prefix="LLMGW_"', 'env_prefix=""', "pytest"),
     ("T1-04 anthropic key defaults to value", SRC / "config.py", "SecretStr | None = None", 'SecretStr | None = SecretStr("x")', "pytest"),
     ("T1-05 injected clock ignored", SRC / "main.py", "clock=clock if clock is not None else _utc_now", "clock=_utc_now", "pytest"),
-    ("T1-06 injected settings ignored", SRC / "main.py", "settings=settings if settings is not None else Settings()", "settings=Settings()", "pytest"),
+    ("T1-06 injected settings ignored", SRC / "main.py", "    settings = settings if settings is not None else Settings()\n", "    settings = Settings()\n", "pytest"),
     ("T1-07 module-level app re-added", SRC / "main.py", "    return app\n", "    return app\n\n\napp = create_app()\n", "pytest"),
     ("T1-08 health status wrong", SRC / "main.py", '{"status": "ok"', '{"status": "up"', "pytest"),
     ("T1-12 input shown in errors", SRC / "config.py", "hide_input_in_errors=True", "hide_input_in_errors=False", "pytest"),
@@ -26,10 +26,10 @@ MUTANTS = [
 ]
 
 CHECKS = {
-    "pytest": ["uv", "run", "pytest", "-q", "-x", "-p", "no:warnings"],
-    "mypy": ["uv", "run", "mypy"],
-    "ruff": ["uv", "run", "ruff", "check", "."],
-    "format": ["uv", "run", "ruff", "format", "--check", "."],
+    "pytest": [sys.executable, "-m", "pytest", "-q", "-x", "-p", "no:warnings"],
+    "mypy": [sys.executable, "-m", "mypy"],
+    "ruff": [sys.executable, "-m", "ruff", "check", "."],
+    "format": [sys.executable, "-m", "ruff", "format", "--check", "."],
 }
 
 

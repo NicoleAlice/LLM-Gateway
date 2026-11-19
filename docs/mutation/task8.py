@@ -28,7 +28,7 @@ MUTANTS = [
     ("T03 audit record accepts naive", ROOT / "src" / "llm_gateway" / "audit" / "records.py", "        if self.created_at.tzinfo is None:\n", "        if False:\n"),
 ]
 
-CMD = ["uv", "run", "pytest", "-q", "-x", "-p", "no:warnings"]
+CMD = [sys.executable, "-m", "pytest", "-q", "-x", "-p", "no:warnings"]
 for mid, path, old, new in MUTANTS:
     original = path.read_text(encoding="utf-8")
     assert old in original, f"{mid}: pattern not found"

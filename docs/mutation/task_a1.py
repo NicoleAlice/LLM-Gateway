@@ -32,7 +32,7 @@ MUTANTS = [
     ("C08 encode keeps the original offset", CUR, '{"t": position.created_at.astimezone(UTC).isoformat(),', '{"t": position.created_at.isoformat(),'),
 ]
 
-CMD = ["uv", "run", "pytest", "-q", "-x", "-p", "no:warnings"]
+CMD = [sys.executable, "-m", "pytest", "-q", "-x", "-p", "no:warnings"]
 for mid, path, old, new in MUTANTS:
     original = path.read_text(encoding="utf-8")
     assert old in original, f"{mid}: pattern not found"

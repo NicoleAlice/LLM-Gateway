@@ -44,7 +44,7 @@ MUTANTS = [
     ("R10 get_by_prefix broken", REPO, "return self._by_prefix.get(prefix)\n", "return None\n"),
 ]
 
-CMD = ["uv", "run", "pytest", "-q", "-x", "-p", "no:warnings"]
+CMD = [sys.executable, "-m", "pytest", "-q", "-x", "-p", "no:warnings"]
 for mid, path, old, new in MUTANTS:
     original = path.read_text(encoding="utf-8")
     assert old in original, f"{mid}: pattern not found"

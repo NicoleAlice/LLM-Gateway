@@ -49,7 +49,7 @@ MUTANTS = [
     ("L06 default limit changed", S / "config.py", "Field(1_048_576, ge=1024)", "Field(10_485_760, ge=1024)"),
 ]
 
-CMD = ["uv", "run", "pytest", "-q", "-x", "-p", "no:warnings"]
+CMD = [sys.executable, "-m", "pytest", "-q", "-x", "-p", "no:warnings"]
 for mid, path, old, new in MUTANTS:
     original = path.read_text(encoding="utf-8")
     assert old in original, f"{mid}: pattern not found"
