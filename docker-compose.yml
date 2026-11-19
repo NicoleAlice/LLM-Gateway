@@ -1,0 +1,19 @@
+# Local PostgreSQL for development (optional: any PostgreSQL 17 works).
+#   docker compose up -d
+#   LLMGW_DATABASE_URL=postgresql+asyncpg://llmgw:llmgw@localhost:5432/llmgw uv run alembic upgrade head
+# The second database, llmgw_test, is the one the test suite resets.
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: llmgw
+      POSTGRES_PASSWORD: llmgw  # local development only
+      POSTGRES_DB: llmgw
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - ./docker/create-test-db.sql:/docker-entrypoint-initdb.d/create-test-db.sql:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "llmgw"]
+      interval: 5s
+      retries: 10

@@ -1,12 +1,16 @@
 import os
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from llm_gateway.config import Settings
+from llm_gateway.db.engine import make_engine
 from llm_gateway.main import create_app
+from tests.pg import TABLES, TEST_DATABASE_URL, URL_VAR, reset_schema
 
 
 @pytest.fixture(autouse=True)
@@ -43,6 +47,27 @@ def clock(fixed_now: datetime) -> MutableClock:
 @pytest.fixture
 def settings() -> Settings:
     return Settings(_env_file=None, admin_token="test-admin-token")
+
+
+@pytest.fixture(scope="session")
+def pg_url() -> str:
+    """The test database, reset and migrated once per run. Skips without one."""
+    if TEST_DATABASE_URL is None:
+        pytest.skip(f"PostgreSQL tests: set {URL_VAR}")
+    reset_schema(TEST_DATABASE_URL)
+    return TEST_DATABASE_URL
+
+
+@pytest.fixture
+async def pg_engine(pg_url: str) -> AsyncIterator[AsyncEngine]:
+    """An engine on the test database with every table emptied first."""
+    engine = make_engine(pg_url, null_pool=True)
+    async with engine.begin() as conn:
+        await conn.execute(text(f"TRUNCATE {TABLES}"))
+    try:
+        yield engine
+    finally:
+        await engine.dispose()
 
 
 @pytest.fixture

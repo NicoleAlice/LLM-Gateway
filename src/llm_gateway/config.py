@@ -1,6 +1,8 @@
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from llm_gateway.db.engine import DRIVER_SCHEME
+
 
 class Settings(BaseSettings):
     """Runtime configuration, read from ``LLMGW_*`` environment variables."""
@@ -18,6 +20,18 @@ class Settings(BaseSettings):
     max_body_bytes: int = Field(1_048_576, ge=1024)  # 1 MiB; bodies above it get 413
     # A provider call that hasn't answered after this many seconds is cut off (504).
     provider_timeout_s: float = Field(120, ge=1, le=600)
+
+    # Unset: everything is stored in memory. Set: PostgreSQL, schema from `alembic upgrade head`.
+    database_url: SecretStr | None = None
+
+    @field_validator("database_url")
+    @classmethod
+    def _asyncpg_url_or_none(cls, url: SecretStr | None) -> SecretStr | None:
+        if url is None or not url.get_secret_value():
+            return None
+        if not url.get_secret_value().startswith(DRIVER_SCHEME):
+            raise ValueError(f"the database URL must start with {DRIVER_SCHEME}")
+        return url
 
     @field_validator("anthropic_api_key")
     @classmethod

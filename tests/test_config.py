@@ -78,6 +78,50 @@ def test_provider_timeout_out_of_bounds_is_rejected(
         Settings(_env_file=None)
 
 
+DB_URL = "postgresql+asyncpg://gateway:DB-PASSWORD-MARKER@db.internal:5432/llmgw"
+
+
+def test_database_url_read_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLMGW_ADMIN_TOKEN", "x" * 16)
+    assert Settings(_env_file=None).database_url is None
+    monkeypatch.setenv("LLMGW_DATABASE_URL", f" {DB_URL}\n")
+    url = Settings(_env_file=None).database_url
+    assert url is not None and url.get_secret_value() == DB_URL
+
+
+@pytest.mark.parametrize("raw", ["", "   ", "\t\n"])
+def test_blank_database_url_means_in_memory(monkeypatch: pytest.MonkeyPatch, raw: str) -> None:
+    monkeypatch.setenv("LLMGW_ADMIN_TOKEN", "x" * 16)
+    monkeypatch.setenv("LLMGW_DATABASE_URL", raw)
+    assert Settings(_env_file=None).database_url is None
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "postgresql://gateway:DB-PASSWORD-MARKER@db/llmgw",  # sync driver: not ours
+        "postgresql+psycopg://gateway:DB-PASSWORD-MARKER@db/llmgw",
+        "sqlite+aiosqlite:///DB-PASSWORD-MARKER.db",
+        "DB-PASSWORD-MARKER",
+    ],
+)
+def test_a_database_url_without_asyncpg_is_rejected_without_echo(
+    monkeypatch: pytest.MonkeyPatch, url: str
+) -> None:
+    monkeypatch.setenv("LLMGW_ADMIN_TOKEN", "x" * 16)
+    monkeypatch.setenv("LLMGW_DATABASE_URL", url)
+    with pytest.raises(ValidationError) as excinfo:
+        Settings(_env_file=None)
+    assert "DB-PASSWORD-MARKER" not in str(excinfo.value)
+    assert "postgresql+asyncpg://" in str(excinfo.value)  # says what is expected
+
+
+def test_the_database_password_is_in_no_repr() -> None:
+    settings = Settings(_env_file=None, admin_token="x" * 16, database_url=DB_URL)  # type: ignore[arg-type]
+    assert "DB-PASSWORD-MARKER" not in repr(settings)
+    assert "DB-PASSWORD-MARKER" not in str(settings)
+
+
 def test_an_empty_default_model_means_the_default(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LLMGW_ADMIN_TOKEN", "x" * 16)
     monkeypatch.setenv("LLMGW_DEFAULT_MODEL", "")

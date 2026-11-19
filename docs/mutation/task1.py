@@ -41,11 +41,11 @@ results = []
 for mid, path, old, new, check in MUTANTS:
     original = path.read_text(encoding="utf-8")
     assert old in original, f"{mid}: pattern not found"
-    path.write_text(original.replace(old, new, 1), encoding="utf-8")
+    path.write_text(original.replace(old, new, 1), encoding="utf-8", newline="\n")
     try:
         rc = run(CHECKS[check])
     finally:
-        path.write_text(original, encoding="utf-8")
+        path.write_text(original, encoding="utf-8", newline="\n")
     results.append((mid, check, "killed" if rc != 0 else "SURVIVED"))
 
 # Isolation check: with LLMGW_* set in the shell, the suite must still pass (autouse _clean_env).

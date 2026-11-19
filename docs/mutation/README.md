@@ -15,6 +15,12 @@ install points at this checkout, so to run them against a *copy* of the reposito
 `PYTHONPATH=<copy>/src` too; otherwise every mutant reports `SURVIVED` (fails safe, but
 misleading).
 
+From Phase 1b-C on, the suite includes PostgreSQL tests: set `LLMGW_TEST_DATABASE_URL` (shell or
+`./.env`) to a database whose name ends in `_test`, or those tests skip and their mutants
+survive. Files are restored with LF line endings (`newline="
+"`), so a run on Windows leaves
+no CRLF behind.
+
 Every script asserts that each mutation pattern exists and is not a no-op, so a stale
 pattern fails loudly instead of reporting a false "killed".
 
@@ -36,7 +42,8 @@ pattern fails loudly instead of reporting a false "killed".
 | `task_b1.py` | Anthropic provider, error mapping, 400 for rejected requests (Phase 1b-B) | 43 | 43 | 0 |
 | `task_b2.py` | provider timeout, its setting, 504 vs 502, late answers (Phase 1b-B) | 20 | 20 | 0 |
 | `task_b3.py` | wiring: client built only with a key, closed on shutdown, catalog, prices, default model, quiet SDK logs (Phase 1b-B) | 32 | 32 | 0 |
-| **Total** | | **357** | **356** | **1** |
+| `task_c1.py` | PostgreSQL schema and migration, database URL setting, test-database guard (Phase 1b-C) | 19 | 19 | 0 |
+| **Total** | | **376** | **375** | **1** |
 
 Some mutants moved when their target moved: `task8.py` had 26 (its aggregation mutants
 S01-S08 now live, retargeted, in `task_a2.py`), and `task4.py` had 43 (its last-admin

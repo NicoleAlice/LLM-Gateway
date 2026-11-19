@@ -31,11 +31,11 @@ for mid, path, old, new in MUTANTS:
     original = path.read_text(encoding="utf-8")
     assert old in original, f"{mid}: pattern not found"
     assert old != new, f"{mid}: no-op"
-    path.write_text(original.replace(old, new, 1), encoding="utf-8")
+    path.write_text(original.replace(old, new, 1), encoding="utf-8", newline="\n")
     try:
         rc = subprocess.run(CMD, cwd=ROOT, capture_output=True, timeout=300).returncode
     finally:
-        path.write_text(original, encoding="utf-8")
+        path.write_text(original, encoding="utf-8", newline="\n")
     print(f"{mid}\t{'killed' if rc else 'SURVIVED'}")
 rc = subprocess.run(CMD, cwd=ROOT, capture_output=True).returncode
 print("baseline after restore:", "green" if rc == 0 else "RED")
