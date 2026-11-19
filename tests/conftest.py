@@ -1,5 +1,6 @@
 import os
 from collections.abc import AsyncIterator, Iterator
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 
 import pytest
@@ -11,6 +12,8 @@ from llm_gateway.config import Settings
 from llm_gateway.db.engine import make_engine
 from llm_gateway.main import create_app
 from tests.pg import TABLES, TEST_DATABASE_URL, URL_VAR, reset_schema
+
+pytest_plugins = ["tests.contracts"]  # the `repos` fixture: every repository test on every backend
 
 
 @pytest.fixture(autouse=True)
@@ -54,7 +57,10 @@ def pg_url() -> str:
     """The test database, reset and migrated once per run. Skips without one."""
     if TEST_DATABASE_URL is None:
         pytest.skip(f"PostgreSQL tests: set {URL_VAR}")
-    reset_schema(TEST_DATABASE_URL)
+    # In a thread: the reset runs its own event loop (asyncio.run, Alembic's env.py), and
+    # this fixture may be first requested from inside a running one (an async fixture).
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        pool.submit(reset_schema, TEST_DATABASE_URL).result()
     return TEST_DATABASE_URL
 
 

@@ -4,7 +4,7 @@
 
 A multi-tenant gateway that sits between applications and LLM providers and controls **who can call which model, what each call costs, and what happened on every call**.
 
-> **Status:** Phase 1 (in-memory) is complete: keys, roles, routing, date-effective billing, `/v1/chat` and an audit row for every chat attempt, behind 381 tests, plus keyset pagination for the audit trail. Set `LLMGW_ANTHROPIC_API_KEY` and `/v1/chat` routes to Claude (Opus 5.5 by default, Sonnet 5.5 on request) through the official SDK; without a key it runs on a built-in fake provider. The tests never touch the network. Storage is in memory; PostgreSQL is next. See the [roadmap](#roadmap).
+> **Status:** Phase 1 (in-memory) is complete: keys, roles, routing, date-effective billing, `/v1/chat` and an audit row for every chat attempt, behind 401 tests, plus keyset pagination for the audit trail. Set `LLMGW_ANTHROPIC_API_KEY` and `/v1/chat` routes to Claude (Opus 5.5 by default, Sonnet 5.5 on request) through the official SDK; without a key it runs on a built-in fake provider. The tests never touch the network. Storage is in memory; PostgreSQL is next. See the [roadmap](#roadmap).
 
 ## Features
 
@@ -167,12 +167,12 @@ Every error has the same shape: `{"error": {"code": "...", "message": "..."}}`.
 ## How it was built and tested
 
 - **Test-first, task by task**, from a written plan ([docs/superpowers/plans/](docs/superpowers/plans/2026-11-17-phase-1-core.md)).
-- **Mutation testing** on every task: the code is deliberately broken in 376 specific ways (accept revoked keys, bill failed calls, skip the secret check, drop the cancellation shield, repeat a row across pages…) to prove the tests catch each one. On the current code 375 are caught; the remaining one is a documented equivalent mutant (a default value no code path can observe). The scripts and results are in [docs/mutation/](docs/mutation/README.md).
+- **Mutation testing** on every task: the code is deliberately broken in 387 specific ways (accept revoked keys, bill failed calls, skip the secret check, drop the cancellation shield, repeat a row across pages…) to prove the tests catch each one. On the current code 386 are caught; the remaining one is a documented equivalent mutant (a default value no code path can observe). The scripts and results are in [docs/mutation/](docs/mutation/README.md).
 - **An independent adversarial review** of every security-relevant change, then a fix and a test for each finding.
 - **CI** on every push to `main` and every pull request: `ruff check`, `ruff format --check`, `mypy` (strict) and `pytest` with coverage.
 
 ```bash
-uv run pytest              # 381 tests (the PostgreSQL ones need LLMGW_TEST_DATABASE_URL)
+uv run pytest              # 401 tests (the PostgreSQL ones need LLMGW_TEST_DATABASE_URL)
 uv run mypy                # strict
 uv run ruff check . && uv run ruff format --check .
 ```

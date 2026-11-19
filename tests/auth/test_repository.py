@@ -7,9 +7,9 @@ from llm_gateway.auth.keys import Role, Tenant, generate_key
 from llm_gateway.auth.repository import (
     DuplicateKeyPrefixError,
     InMemoryKeyRepository,
-    InMemoryTenantRepository,
     RevokeOutcome,
 )
+from tests.contracts import Repos
 
 
 async def test_revoke_is_scoped_and_idempotent(fixed_now: datetime) -> None:
@@ -57,12 +57,20 @@ async def test_equal_timestamps_are_ordered_by_id(fixed_now: datetime) -> None:
     assert [k.id for k in await repo.list_for_tenant("t1")] == sorted(k.id for k in keys)
 
 
-async def test_duplicate_tenant_is_rejected() -> None:
-    repo = InMemoryTenantRepository()
+async def test_duplicate_tenant_is_rejected(repos: Repos) -> None:
+    repo = repos.tenants
     await repo.add(Tenant(id="t1", name="acme"))
-    with pytest.raises(ValueError, match="duplicate tenant id"):
+    with pytest.raises(ValueError, match="duplicate tenant id") as excinfo:
         await repo.add(Tenant(id="t1", name="other"))
+    # Raised outside the driver's except: no database error (or its SQL) travels with it.
+    assert excinfo.value.__context__ is None and excinfo.value.__cause__ is None
     assert await repo.get("t1") == Tenant(id="t1", name="acme")
+
+
+@pytest.mark.parametrize("name", ["Ação & Cia — 東京 🚀", "x" * 100, "a'; DROP TABLE tenants; --"])
+async def test_tenant_names_round_trip_unchanged(repos: Repos, name: str) -> None:
+    await repos.tenants.add(Tenant(id="t1", name=name))
+    assert await repos.tenants.get("t1") == Tenant(id="t1", name=name)
 
 
 async def test_revoke_unknown_key_is_not_found(fixed_now: datetime) -> None:
@@ -156,8 +164,8 @@ async def test_list_includes_revoked_keys(fixed_now: datetime) -> None:
     assert listed.revoked_at == fixed_now
 
 
-async def test_tenant_repository_roundtrip() -> None:
-    repo = InMemoryTenantRepository()
+async def test_tenant_repository_roundtrip(repos: Repos) -> None:
+    repo = repos.tenants
     await repo.add(Tenant(id="t1", name="acme"))
     assert await repo.get("t1") == Tenant(id="t1", name="acme")
     assert await repo.get("t2") is None
