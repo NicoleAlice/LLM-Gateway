@@ -177,10 +177,16 @@ uv run mypy                # strict
 uv run ruff check . && uv run ruff format --check .
 ```
 
+**One opt-in live test** sends a real request to Claude through the whole gateway and checks the answer, the token usage, the billed cost and the audit row. It costs real money (under $0.001 per run), so it is excluded by default, never runs in CI, and runs only with both variables set:
+
+```bash
+LLMGW_LIVE_TESTS=1 LLMGW_ANTHROPIC_API_KEY=sk-ant-... uv run pytest -m live
+```
+
 ## Roadmap
 
 - [x] **Phase 1a: core, in memory**: tenants, API keys, RBAC, revocation, routing rules, `/v1/chat`, audit, date-effective billing, fake provider
-- [ ] **Phase 1b: persistence and a real provider**: done: keyset pagination for `/v1/audit`, usage aggregated by the repository, an atomic last-admin check, the Anthropic provider with a provider timeout. Next: PostgreSQL + Alembic
+- [ ] **Phase 1b: persistence and a real provider**: done: keyset pagination for `/v1/audit`, usage aggregated by the repository, an atomic last-admin check, the Anthropic provider with a provider timeout, an opt-in live test. Next: PostgreSQL + Alembic
 - [ ] **Phase 2: FinOps and operations**: quotas and budgets, SSE streaming, OpenTelemetry traces, Prometheus metrics, rate limiting
 - [ ] **Phase 3: deployment**: Dockerfile, Docker Compose, Helm chart tested on `kind`
 
